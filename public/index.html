@@ -875,13 +875,17 @@
     }
 
     var statusMessages = [
-      'Capturing screenshot...',
+      'Capturing full-page screenshot...',
       'Extracting page metadata...',
       'Claude is analyzing the page...',
-      'Generating annotation plan...',
-      'Rendering all formats...',
+      'Breaking into carousel slides...',
+      'Rendering slide annotations...',
+      'Building format variants...',
       'Almost there...',
     ];
+
+    var currentSlideIndex = 0;
+    var slideData = [];
 
     urlInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') generate();
@@ -1056,25 +1060,40 @@
 
         var data = await res.json();
 
-        if (data.images) {
-          // Map images back to platforms (multiple platforms can share a ratio)
-          selected.forEach(function(p) {
-            var img = data.images[p.ratio];
-            if (img) {
-              generatedImages.push({ id: p.id, name: p.name, ratio: p.ratio, image: img });
-              setCardLoaded(p.id, img);
-            } else {
-              setCardError(p.id, 'No image for this format');
-            }
-          });
-        } else {
-          throw new Error('No images returned');
+        if (!data.slides || data.slides.length === 0) {
+          throw new Error('No slides returned');
         }
 
+        // Store slide data for navigation
+        slideData = data.slides;
+        currentSlideIndex = 0;
+
+        // Build generatedImages from all slides for download/lightbox
+        generatedImages = [];
+        slideData.forEach(function(slide) {
+          selected.forEach(function(p) {
+            var img = slide.images[p.ratio];
+            if (img) {
+              generatedImages.push({
+                id: 'slide' + slide.slideNumber + '-' + p.id,
+                slideNumber: slide.slideNumber,
+                slideTitle: slide.title,
+                name: p.name,
+                ratio: p.ratio,
+                image: img
+              });
+            }
+          });
+        });
+
+        // Show first slide
+        showSlide(0, selected);
+
         var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        resultsTitle.textContent = generatedImages.length + '/' + selected.length + ' images generated';
-        resultsInfo.textContent = label + ' \u2014 ' + elapsed + 's \u2014 ' + uniqueFormats.length + ' unique ratio' + (uniqueFormats.length > 1 ? 's' : '') + ' rendered';
-        costBadge.textContent = '~$0.03';
+        var totalImages = generatedImages.length;
+        resultsTitle.textContent = slideData.length + ' slides \u00B7 ' + totalImages + ' images';
+        resultsInfo.textContent = label + ' \u2014 ' + elapsed + 's';
+        costBadge.textContent = '~$0.0' + (3 + slideData.length);
       } catch (err) {
         clearInterval(statusInterval);
         selected.forEach(function(p) { setCardError(p.id, err.message); });
@@ -1086,6 +1105,106 @@
         var genBtnImg2 = document.getElementById('generate-btn-img');
         if (genBtnImg2) genBtnImg2.disabled = false;
       }
+    }
+
+    function showSlide(index, selected) {
+      if (!slideData.length) return;
+      currentSlideIndex = index;
+      var slide = slideData[index];
+      imageGrid.textContent = '';
+
+      // Slide navigation bar
+      var nav = document.createElement('div');
+      nav.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-bottom:1rem;';
+
+      var prevBtn = document.createElement('button');
+      prevBtn.textContent = '\u2039';
+      prevBtn.style.cssText = 'background:var(--surface);border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:50%;font-size:1.2rem;cursor:pointer;display:' + (slideData.length > 1 ? 'block' : 'none');
+      prevBtn.addEventListener('click', function() {
+        var prev = (currentSlideIndex - 1 + slideData.length) % slideData.length;
+        showSlide(prev, selected || getSelectedPlatforms());
+      });
+
+      var slideLabel = document.createElement('div');
+      slideLabel.style.cssText = 'text-align:center;';
+      var slideNum = document.createElement('span');
+      slideNum.style.cssText = 'display:inline-block;background:var(--accent);color:white;width:28px;height:28px;line-height:28px;border-radius:50%;font-size:0.85rem;font-weight:700;margin-right:0.5rem;';
+      slideNum.textContent = slide.slideNumber;
+      var slideTitle = document.createElement('span');
+      slideTitle.style.cssText = 'color:var(--text);font-size:0.95rem;font-weight:600;';
+      slideTitle.textContent = slide.title || ('Slide ' + slide.slideNumber);
+      var slideCount = document.createElement('span');
+      slideCount.style.cssText = 'color:var(--muted);font-size:0.8rem;margin-left:0.5rem;';
+      slideCount.textContent = slide.slideNumber + '/' + slideData.length;
+      slideLabel.appendChild(slideNum);
+      slideLabel.appendChild(slideTitle);
+      slideLabel.appendChild(slideCount);
+
+      var nextBtn = document.createElement('button');
+      nextBtn.textContent = '\u203A';
+      nextBtn.style.cssText = prevBtn.style.cssText;
+      nextBtn.addEventListener('click', function() {
+        var next = (currentSlideIndex + 1) % slideData.length;
+        showSlide(next, selected || getSelectedPlatforms());
+      });
+
+      nav.appendChild(prevBtn);
+      nav.appendChild(slideLabel);
+      nav.appendChild(nextBtn);
+      imageGrid.parentNode.insertBefore(nav, imageGrid);
+
+      // Remove old nav if exists
+      var oldNavs = imageGrid.parentNode.querySelectorAll('.slide-nav');
+      oldNavs.forEach(function(n) { n.remove(); });
+      nav.className = 'slide-nav';
+
+      // Dot indicators
+      if (slideData.length > 1) {
+        var dots = document.createElement('div');
+        dots.className = 'slide-nav';
+        dots.style.cssText = 'display:flex;justify-content:center;gap:6px;margin-bottom:1rem;';
+        slideData.forEach(function(s, i) {
+          var dot = document.createElement('div');
+          dot.style.cssText = 'width:8px;height:8px;border-radius:50%;cursor:pointer;transition:all 0.2s;background:' + (i === index ? 'var(--accent)' : 'var(--border)');
+          dot.addEventListener('click', function() { showSlide(i, selected || getSelectedPlatforms()); });
+          dots.appendChild(dot);
+        });
+        imageGrid.parentNode.insertBefore(dots, imageGrid);
+      }
+
+      // Show format cards for this slide
+      var platforms = selected || getSelectedPlatforms();
+      platforms.forEach(function(p) {
+        var img = slide.images[p.ratio];
+        var card = buildCardElement(p, img ? 'loaded' : 'error');
+        imageGrid.appendChild(card);
+        if (img) {
+          setCardLoaded(p.id, img);
+          // Override the card's download to use slide-specific ID
+          var dlBtn = card.querySelector('.card-download');
+          if (dlBtn) {
+            dlBtn.onclick = function() {
+              var a = document.createElement('a');
+              a.href = img;
+              var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
+              a.download = 'scrapes_' + domain + '_slide' + slide.slideNumber + '_' + p.id + '.png';
+              a.click();
+            };
+          }
+          // Override click for lightbox
+          var cardImg = card.querySelector('.card-body img');
+          if (cardImg) {
+            (function(slideNum, ratio) {
+              cardImg.onclick = function() {
+                var lbIdx = generatedImages.findIndex(function(gi) { return gi.slideNumber === slideNum && gi.ratio === ratio; });
+                if (lbIdx !== -1) { updateLightbox(lbIdx); lightbox.classList.add('visible'); document.body.style.overflow = 'hidden'; }
+              };
+            })(slide.slideNumber, p.ratio);
+          }
+        } else {
+          setCardError(p.id, 'No image for this format');
+        }
+      });
     }
 
     function downloadOne(platformId) {
@@ -1104,7 +1223,12 @@
       removeLogo();
       removeSourceImage();
       generatedImages = [];
+      slideData = [];
+      currentSlideIndex = 0;
       imageGrid.textContent = '';
+      // Remove slide nav elements
+      var navs = document.querySelectorAll('.slide-nav');
+      navs.forEach(function(n) { n.remove(); });
       resultsEl.classList.remove('visible');
       errorEl.classList.remove('visible');
       statusEl.classList.remove('visible');
@@ -1187,12 +1311,14 @@
     });
 
     function downloadAll() {
-      generatedImages.forEach(function(img) {
-        var a = document.createElement('a');
-        a.href = img.image;
-        var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
-        a.download = 'scrapes_' + domain + '_' + img.id + '.png';
-        a.click();
+      generatedImages.forEach(function(img, i) {
+        setTimeout(function() {
+          var a = document.createElement('a');
+          a.href = img.image;
+          var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
+          a.download = 'scrapes_' + domain + '_slide' + img.slideNumber + '_' + img.ratio.replace(':', 'x') + '.png';
+          a.click();
+        }, i * 200);
       });
     }
   </script>

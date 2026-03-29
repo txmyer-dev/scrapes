@@ -5,7 +5,7 @@ services:
     ports:
       - "3101:3100"
     environment:
-      - N8N_WEBHOOK=https://n8n.felaniam.cloud/webhook/annotate
+      - N8N_WEBHOOK=https://n8n.felaniam.cloud/webhook/scrapes
       - PORT=3100
     restart: unless-stopped
     labels:
