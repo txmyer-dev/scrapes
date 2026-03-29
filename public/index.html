@@ -730,9 +730,9 @@
 
   <script>
     const PLATFORMS = [
-      { id: 'portrait',   name: 'Portrait',   ratio: '3:4',   w: 1080, h: 1440 },
-      { id: 'social',     name: 'Social',      ratio: '4:5',   w: 1080, h: 1350 },
-      { id: 'story',      name: 'Story',       ratio: '9:16',  w: 1080, h: 1920 },
+      { id: 'portrait',   name: '3:4',    ratio: '3:4',   w: 1080, h: 1440 },
+      { id: 'social',     name: '4:5',    ratio: '4:5',   w: 1080, h: 1350 },
+      { id: 'story',      name: '9:16',   ratio: '9:16',  w: 1080, h: 1920 },
     ];
 
     const DEFAULT_SELECTED = ['portrait', 'social', 'story'];
@@ -761,7 +761,7 @@
 
       var dims = document.createElement('span');
       dims.className = 'dims';
-      dims.textContent = p.ratio + ' \u00B7 ' + p.w + '\u00D7' + p.h;
+      dims.textContent = p.w + '\u00D7' + p.h;
       label.appendChild(dims);
 
       chip.appendChild(input);
