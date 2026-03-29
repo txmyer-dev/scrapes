@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  scrapes:
+    build: .
+    ports:
+      - "3101:3100"
+    environment:
+      - N8N_WEBHOOK=https://n8n.felaniam.cloud/webhook/annotate
+      - PORT=3100
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.scrapes.rule=Host(`scrapes.felaniam.cloud`)"
+      - "traefik.http.routers.scrapes.entrypoints=https"
+      - "traefik.http.routers.scrapes.tls=true"
+      - "traefik.http.routers.scrapes.tls.certresolver=letsencrypt"
+      - "traefik.http.services.scrapes.loadbalancer.server.port=3100"
+    networks:
+      - coolify
+
+networks:
+  coolify:
+    external: true

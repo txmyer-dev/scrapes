@@ -1,0 +1,13 @@
+{
+  "name": "scrapes",
+  "version": "1.0.0",
+  "description": "URL to annotated tutorial images — Scrapes.ai x Hostinger Hackathon 2026",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
