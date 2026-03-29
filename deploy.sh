@@ -6,7 +6,10 @@ docker run -d \
   --name scrapes \
   --network coolify \
   --restart unless-stopped \
-  -e N8N_WEBHOOK=https://n8n.felaniam.cloud/webhook/scrapes \
+  -e N8N_RENDER_WEBHOOK=https://n8n.felaniam.cloud/webhook/scrapes-render \
+  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+  -e SSO_ACCESS_KEY="${SSO_ACCESS_KEY}" \
+  -e SSO_SECRET_KEY="${SSO_SECRET_KEY}" \
   -e PORT=3100 \
   -l 'traefik.enable=true' \
   -l 'traefik.http.services.scrapes.loadbalancer.server.port=3100' \
