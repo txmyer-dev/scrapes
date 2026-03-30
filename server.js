@@ -143,7 +143,10 @@ Analyze this page and create the carousel slide plan using the 4-type system.`;
 
   const text = response.content[0].text;
   const cleaned = text.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned);
+  const parsed = JSON.parse(cleaned);
+  // Log full Claude response for debugging annotation quality
+  console.log('[CLAUDE PLAN]', JSON.stringify(parsed, null, 2));
+  return parsed;
 }
 
 // --- HTML Template Builders for Pure Slides ---
