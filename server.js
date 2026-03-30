@@ -56,36 +56,67 @@ async function fetchMetadata(targetUrl) {
   }
 }
 
-// --- Claude Vision ---
+// --- Claude Vision (4-type slide system) ---
 async function analyzeWithClaude(base64Image, metadata, userPrompt) {
-  const systemPrompt = `You are an expert at creating annotated tutorial image carousels. You will receive a full-page screenshot and must break it into 3-5 carousel slides.
+  const systemPrompt = `You are an expert at creating tutorial image carousels from webpage screenshots. You produce 4 types of slides:
+
+SLIDE TYPES:
+1. "opener" — Pure text title card. Establishes what this page/tool/article is about. Always slide 1.
+2. "scene" — Screenshot crop with annotations. Shows a specific section of the page with highlights, arrows, and callouts. The workhorse — most slides are this type.
+3. "insight" — Pure text slide for key takeaways, stats, comparisons, or quotes that are cleaner as text than as a screenshot crop. OPTIONAL — only include when the content has a clear takeaway worth pulling out.
+4. "closer" — Contextual ending. Adapts to content type: "Try it" for tools, "Key steps" recap for tutorials, "TL;DR" for articles. Always the last slide.
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {
   "title": "Overall carousel title (max 8 words)",
   "subtitle": "One-line description",
-  "colorScheme": { "primary": "#hex", "secondary": "#hex", "accent": "#hex", "text": "#hex" },
+  "pageType": "docs|blog|landing|portfolio|tool|news|tutorial|other",
+  "colorScheme": { "primary": "#hex", "secondary": "#hex", "accent": "#hex", "text": "#ffffff" },
   "slides": [
     {
       "slideNumber": 1,
-      "title": "Slide title",
+      "type": "opener",
+      "title": "Big headline for the opener",
+      "subtitle": "One supporting line",
+      "badge": "SHORT LABEL"
+    },
+    {
+      "slideNumber": 2,
+      "type": "scene",
+      "title": "What this section shows",
       "cropRegion": { "y_start": 0, "y_end": 25 },
       "annotations": [
         { "type": "highlight", "region": { "x": 10, "y": 20, "width": 30, "height": 15 }, "label": "Callout", "color": "#hex" },
         { "type": "arrow", "from": { "x": 50, "y": 30 }, "to": { "x": 70, "y": 50 }, "label": "Points to", "color": "#hex" },
         { "type": "callout", "position": { "x": 40, "y": 60 }, "text": "Explanation", "number": 1, "color": "#hex" }
       ]
+    },
+    {
+      "slideNumber": 3,
+      "type": "insight",
+      "title": "Key Insight Title",
+      "bullets": ["First point here", "Second point here", "Third point here"],
+      "icon": "lightbulb|chart|quote|list|star|check"
+    },
+    {
+      "slideNumber": 4,
+      "type": "closer",
+      "title": "Try it yourself",
+      "body": "Short closing line or recap",
+      "cta": "Visit example.com"
     }
   ]
 }
 
 RULES:
-- cropRegion y_start/y_end: percentages (0-100) of full page height
-- Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full page
-- Slide 1 = HOOK (hero/striking part), middle = KEY FEATURES/STEPS, last = RESULT/CTA
-- 2-5 annotations per slide, consistent color scheme
+- ALWAYS start with an opener (slide 1) and end with a closer (last slide)
+- Scene slides: cropRegion y_start/y_end are percentages (0-100) of full page height. Annotation coordinates are percentages RELATIVE TO THE CROP REGION.
+- Scene slides: 2-5 annotations each, consistent with colorScheme
 - Crop regions should NOT overlap — cover different sections of the page
-- 3-5 slides depending on content density`;
+- Insight slides are OPTIONAL. Only include when there's a genuine takeaway worth pulling out as text. Don't force them.
+- Total slides: 3-6 depending on content density. A simple page might be opener + 1-2 scenes + closer. A rich page might be opener + 3 scenes + insight + closer.
+- Adapt the closer to the page type. Tools/products: "Try it" + URL. Tutorials: recap steps. Articles: TL;DR. Portfolios: "Get in touch".
+- badge on opener: a short category label like "TOOL", "TUTORIAL", "BLOG", "DOCS", "PORTFOLIO" etc.`;
 
   const userText = `This is a full-page screenshot of ${metadata.url}.
 
@@ -95,7 +126,7 @@ Page context:
 - Key sections: ${JSON.stringify(metadata.headings)}
 ${userPrompt ? '\nUser instructions: ' + userPrompt : ''}
 
-Analyze this page and create the carousel annotation plan.`;
+Analyze this page and create the carousel slide plan using the 4-type system.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
@@ -113,6 +144,120 @@ Analyze this page and create the carousel annotation plan.`;
   const text = response.content[0].text;
   const cleaned = text.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(cleaned);
+}
+
+// --- HTML Template Builders for Pure Slides ---
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');`;
+
+const ICON_SVG = {
+  lightbulb: `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>`,
+  chart: `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+  quote: `<svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>`,
+  list: `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+  star: `<svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  check: `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+};
+
+function buildOpenerHtml(slide, carousel, W, H, totalSlides) {
+  const cs = carousel.colorScheme;
+  const badge = escHtml(slide.badge || carousel.pageType || '');
+  const title = escHtml(slide.title || carousel.title || '');
+  const subtitle = escHtml(slide.subtitle || carousel.subtitle || '');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+${FONT_IMPORT}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: ${W}px; height: ${H}px; overflow: hidden; background: #0a0a0a; font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: ${Math.round(W * 0.08)}px; position: relative; }
+body::before { content: ''; position: absolute; top: -40%; left: -20%; width: 140%; height: 100%; background: radial-gradient(ellipse at 30% 20%, ${cs.primary}22, transparent 60%), radial-gradient(ellipse at 70% 80%, ${cs.secondary}18, transparent 50%); pointer-events: none; }
+.badge { display: inline-block; background: ${cs.primary}; color: white; font-size: ${Math.round(W * 0.018)}px; font-weight: 700; letter-spacing: 0.12em; padding: ${Math.round(H * 0.008)}px ${Math.round(W * 0.025)}px; border-radius: 6px; margin-bottom: ${Math.round(H * 0.025)}px; text-transform: uppercase; position: relative; z-index: 1; }
+.title { font-size: ${Math.round(W * 0.065)}px; font-weight: 800; color: #f0f0f0; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: ${Math.round(H * 0.02)}px; max-width: 90%; position: relative; z-index: 1; }
+.subtitle { font-size: ${Math.round(W * 0.026)}px; font-weight: 400; color: rgba(255,255,255,0.55); line-height: 1.5; max-width: 80%; position: relative; z-index: 1; }
+.accent-line { width: ${Math.round(W * 0.08)}px; height: 4px; background: ${cs.primary}; border-radius: 2px; margin: ${Math.round(H * 0.025)}px auto; position: relative; z-index: 1; }
+.counter { position: absolute; bottom: ${Math.round(H * 0.03)}px; right: ${Math.round(W * 0.04)}px; font-size: ${Math.round(W * 0.018)}px; color: rgba(255,255,255,0.25); font-weight: 600; }
+</style></head><body>
+<div class="badge">${badge}</div>
+<div class="title">${title}</div>
+<div class="accent-line"></div>
+<div class="subtitle">${subtitle}</div>
+<div class="counter">${slide.slideNumber}/${totalSlides}</div>
+</body></html>`;
+}
+
+function buildInsightHtml(slide, carousel, W, H, totalSlides) {
+  const cs = carousel.colorScheme;
+  const title = escHtml(slide.title || 'Key Takeaway');
+  const bullets = slide.bullets || [];
+  const iconKey = slide.icon || 'lightbulb';
+  const iconSvg = ICON_SVG[iconKey] || ICON_SVG.lightbulb;
+
+  const bulletHtml = bullets.map((b, i) => `
+    <div class="bullet">
+      <div class="bullet-num">${i + 1}</div>
+      <div class="bullet-text">${escHtml(b)}</div>
+    </div>`).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+${FONT_IMPORT}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: ${W}px; height: ${H}px; overflow: hidden; background: #0a0a0a; font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; padding: ${Math.round(W * 0.08)}px; position: relative; }
+body::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 50% 0%, ${cs.primary}15, transparent 60%); pointer-events: none; }
+.icon { color: ${cs.primary}; margin-bottom: ${Math.round(H * 0.02)}px; position: relative; z-index: 1; }
+.title { font-size: ${Math.round(W * 0.045)}px; font-weight: 800; color: #f0f0f0; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: ${Math.round(H * 0.04)}px; position: relative; z-index: 1; }
+.bullets { display: flex; flex-direction: column; gap: ${Math.round(H * 0.025)}px; position: relative; z-index: 1; flex: 1; justify-content: center; }
+.bullet { display: flex; align-items: flex-start; gap: ${Math.round(W * 0.03)}px; }
+.bullet-num { width: ${Math.round(W * 0.045)}px; height: ${Math.round(W * 0.045)}px; min-width: ${Math.round(W * 0.045)}px; background: ${cs.primary}25; color: ${cs.primary}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ${Math.round(W * 0.022)}px; font-weight: 700; margin-top: 2px; }
+.bullet-text { font-size: ${Math.round(W * 0.028)}px; color: rgba(255,255,255,0.85); line-height: 1.5; font-weight: 400; }
+.counter { position: absolute; bottom: ${Math.round(H * 0.03)}px; right: ${Math.round(W * 0.04)}px; font-size: ${Math.round(W * 0.018)}px; color: rgba(255,255,255,0.25); font-weight: 600; }
+</style></head><body>
+<div class="icon">${iconSvg}</div>
+<div class="title">${title}</div>
+<div class="bullets">${bulletHtml}</div>
+<div class="counter">${slide.slideNumber}/${totalSlides}</div>
+</body></html>`;
+}
+
+function buildCloserHtml(slide, carousel, W, H, totalSlides) {
+  const cs = carousel.colorScheme;
+  const title = escHtml(slide.title || 'Explore');
+  const body = escHtml(slide.body || '');
+  const cta = escHtml(slide.cta || '');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+${FONT_IMPORT}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: ${W}px; height: ${H}px; overflow: hidden; background: #0a0a0a; font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: ${Math.round(W * 0.08)}px; position: relative; }
+body::before { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60%; background: linear-gradient(to top, ${cs.primary}12, transparent); pointer-events: none; }
+.title { font-size: ${Math.round(W * 0.055)}px; font-weight: 800; color: #f0f0f0; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: ${Math.round(H * 0.02)}px; position: relative; z-index: 1; }
+.body { font-size: ${Math.round(W * 0.025)}px; color: rgba(255,255,255,0.55); line-height: 1.6; max-width: 85%; margin-bottom: ${Math.round(H * 0.035)}px; position: relative; z-index: 1; }
+.cta { display: inline-block; background: ${cs.primary}; color: white; font-size: ${Math.round(W * 0.024)}px; font-weight: 700; padding: ${Math.round(H * 0.015)}px ${Math.round(W * 0.06)}px; border-radius: 12px; position: relative; z-index: 1; letter-spacing: 0.01em; }
+.counter { position: absolute; bottom: ${Math.round(H * 0.03)}px; right: ${Math.round(W * 0.04)}px; font-size: ${Math.round(W * 0.018)}px; color: rgba(255,255,255,0.25); font-weight: 600; }
+.arrow { font-size: ${Math.round(W * 0.04)}px; color: ${cs.primary}; margin-bottom: ${Math.round(H * 0.025)}px; position: relative; z-index: 1; }
+</style></head><body>
+<div class="arrow">&#x2192;</div>
+<div class="title">${title}</div>
+<div class="body">${body}</div>
+${cta ? `<div class="cta">${cta}</div>` : ''}
+<div class="counter">${slide.slideNumber}/${totalSlides}</div>
+</body></html>`;
+}
+
+// Build HTML for a pure slide at a specific output format
+function buildPureSlideHtml(slide, carousel, ratioStr, totalSlides) {
+  const parts = ratioStr.split(':').map(Number);
+  const W = 1080;
+  const H = Math.round(W * (parts[1] / parts[0]));
+
+  switch (slide.type) {
+    case 'opener': return buildOpenerHtml(slide, carousel, W, H, totalSlides);
+    case 'insight': return buildInsightHtml(slide, carousel, W, H, totalSlides);
+    case 'closer': return buildCloserHtml(slide, carousel, W, H, totalSlides);
+    default: return null;
+  }
 }
 
 // --- Main endpoint ---
@@ -143,13 +288,24 @@ app.post('/api/annotate', async (req, res) => {
       metadata = { ...meta, url };
     }
 
-    // Step 2: Claude Vision analysis
-    console.log('[2/3] Claude Vision analysis...');
+    // Step 2: Claude Vision analysis (4-type slide system)
+    console.log('[2/3] Claude Vision analysis (4-type slides)...');
     const carousel = await analyzeWithClaude(base64Image, metadata, prompt);
-    console.log(`  → ${carousel.slides.length} slides, "${carousel.title}"`);
+    const totalSlides = carousel.slides.length;
+    console.log(`  → ${totalSlides} slides (types: ${carousel.slides.map(s => s.type).join(', ')}), "${carousel.title}"`);
 
-    // Step 3: Send to n8n for rendering
-    console.log('[3/3] Rendering slides...');
+    // Step 3: Build HTML for pure slides, attach to slide objects
+    console.log('[3/3] Building HTML + rendering...');
+    for (const slide of carousel.slides) {
+      if (slide.type !== 'scene') {
+        slide.htmlByFormat = {};
+        for (const ratioStr of formatList) {
+          slide.htmlByFormat[ratioStr] = buildPureSlideHtml(slide, carousel, ratioStr, totalSlides);
+        }
+      }
+    }
+
+    // Step 4: Send to n8n for rendering (scene slides use crop+annotate, pure slides use provided HTML)
     const renderPayload = {
       carousel,
       base64Image,
@@ -176,9 +332,10 @@ app.post('/api/annotate', async (req, res) => {
       mode: 'carousel',
       title: carousel.title,
       subtitle: carousel.subtitle,
+      pageType: carousel.pageType,
       url: metadata.url,
       formats: formatList,
-      slideCount: renderData.slideCount || carousel.slides.length,
+      slideCount: renderData.slideCount || totalSlides,
       slides: renderData.slides,
     });
 
