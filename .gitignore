@@ -1,2 +1,4 @@
 node_modules
 .env
+deploy-with-keys.sh
+redeploy.sh
