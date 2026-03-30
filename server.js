@@ -112,13 +112,25 @@ RULES:
 - ALWAYS start with an opener (slide 1) and end with a closer (last slide)
 
 CRITICAL SCENE RULES — ANNOTATION QUALITY:
-- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. NEVER more than 20%. Tight crops = readable annotations. Wide crops = unreadable tiny text. If a section is large, pick ONE focused sub-section.
+- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. NEVER more than 20%. Tight crops = readable content.
 - Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full page.
-- 3-5 annotations per scene slide. Use ALL three types (highlight, arrow, callout) in most slides for visual variety.
-- Annotations should point to SPECIFIC UI elements, buttons, text, or features — not vague regions.
-- Highlight regions: width 15-40%, height 5-15%. Big enough to be visible. Small highlights are useless.
-- Callout text: max 30 characters. Short and punchy. "Sign up CTA" not "This is where users can sign up for the service".
-- Arrow labels: max 20 characters.
+- 2-4 annotations per scene slide. Fewer, precise annotations beat many scattered ones.
+
+ANNOTATION PLACEMENT (CRITICAL — READ CAREFULLY):
+- ONLY annotate elements you can clearly SEE and LOCATE in the screenshot. If you cannot identify the exact bounding box of an element, do NOT annotate it.
+- Every annotation MUST point to a visually distinct element: a button, a screenshot region, a headline, a sidebar, a card, a form, a logo bar, a navigation item. NOT blank space.
+- Before placing a highlight, mentally verify: "Is there actually a visible UI element at these coordinates within the crop?" If no, skip it.
+- Before placing an arrow, verify: both the start AND end points touch real elements.
+- Callout numbered circles must sit ON TOP of or immediately adjacent to the thing they describe.
+
+ANNOTATION LABELS (CRITICAL):
+- Labels must EXPLAIN or TEACH, not just name what's visible. The viewer can already see the element — tell them WHY it matters or what it DOES.
+- BAD: "Bold value prop", "Main headline", "Trusted brands", "Feature section"
+- GOOD: "Single launcher replaces 12 apps", "AI auto-routes Slack to issues", "One-click deploy from PR"
+- Each label should make the viewer think "oh, that's interesting" — not "yes, I can see that."
+- Highlight labels: max 25 characters. Explain the insight, not the obvious.
+- Callout text: max 35 characters. Describe what the feature DOES.
+- Arrow labels: max 20 characters. Show a relationship or flow.
 
 COLOR RULES:
 - colorScheme.primary: Pick the page's most VIBRANT brand color — never use dark/black colors (#0F0F0F, #1C1C1E, #111, etc.) as primary. If the page is dark-themed, find the accent color (buttons, links, highlights) and use THAT as primary.
