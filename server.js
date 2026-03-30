@@ -110,12 +110,26 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 
 RULES:
 - ALWAYS start with an opener (slide 1) and end with a closer (last slide)
-- Scene slides: cropRegion y_start/y_end are percentages (0-100) of full page height. Annotation coordinates are percentages RELATIVE TO THE CROP REGION.
-- Scene slides: 2-5 annotations each, consistent with colorScheme
+
+CRITICAL SCENE RULES — ANNOTATION QUALITY:
+- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. NEVER more than 20%. Tight crops = readable annotations. Wide crops = unreadable tiny text. If a section is large, pick ONE focused sub-section.
+- Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full page.
+- 3-5 annotations per scene slide. Use ALL three types (highlight, arrow, callout) in most slides for visual variety.
+- Annotations should point to SPECIFIC UI elements, buttons, text, or features — not vague regions.
+- Highlight regions: width 15-40%, height 5-15%. Big enough to be visible. Small highlights are useless.
+- Callout text: max 30 characters. Short and punchy. "Sign up CTA" not "This is where users can sign up for the service".
+- Arrow labels: max 20 characters.
+
+COLOR RULES:
+- colorScheme.primary: Pick the page's most VIBRANT brand color — never use dark/black colors (#0F0F0F, #1C1C1E, #111, etc.) as primary. If the page is dark-themed, find the accent color (buttons, links, highlights) and use THAT as primary.
+- colorScheme.accent: Must contrast against dark backgrounds. Bright blues, greens, purples, oranges. Never gray or near-black.
+- Annotation colors: Use bright, high-contrast colors that pop on the screenshot. Prefer the page's CTA button color.
+
+OTHER RULES:
 - Crop regions should NOT overlap — cover different sections of the page
 - Insight slides are OPTIONAL. Only include when there's a genuine takeaway worth pulling out as text. Don't force them.
-- Total slides: 3-6 depending on content density. A simple page might be opener + 1-2 scenes + closer. A rich page might be opener + 3 scenes + insight + closer.
-- Adapt the closer to the page type. Tools/products: "Try it" + URL. Tutorials: recap steps. Articles: TL;DR. Portfolios: "Get in touch".
+- Total slides: 3-6 depending on content density.
+- Adapt the closer to the page type. Tools/products: "Try it" + URL. Tutorials: recap steps. Articles: TL;DR.
 - badge on opener: a short category label like "TOOL", "TUTORIAL", "BLOG", "DOCS", "PORTFOLIO" etc.`;
 
   const userText = `This is a full-page screenshot of ${metadata.url}.
