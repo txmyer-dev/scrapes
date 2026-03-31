@@ -57,7 +57,7 @@ async function fetchMetadata(targetUrl) {
 }
 
 // --- Claude Vision (4-type slide system) ---
-async function analyzeWithClaude(base64Image, metadata, userPrompt) {
+async function analyzeWithClaude(base64Image, metadata, userPrompt, mimeType = 'image/jpeg') {
   const systemPrompt = `You are an expert at creating tutorial image carousels from webpage screenshots. You produce 4 types of slides:
 
 SLIDE TYPES:
@@ -160,7 +160,7 @@ Analyze this page and create the carousel slide plan using the 4-type system.`;
     messages: [{
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Image } },
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
         { type: 'text', text: userText },
       ],
     }],
@@ -301,10 +301,11 @@ app.post('/api/annotate', async (req, res) => {
 
   try {
     // Step 1: Get screenshot + metadata in parallel
-    let base64Image, metadata;
+    let base64Image, metadata, detectedMimeType;
     if (image) {
       const match = image.match(/^data:([^;]+);base64,(.+)$/);
       if (!match) throw new Error('Invalid image data');
+      detectedMimeType = match[1];
       base64Image = match[2];
       metadata = { url: 'uploaded-image', title: 'Uploaded Image', description: '', headings: [] };
     } else {
@@ -319,7 +320,8 @@ app.post('/api/annotate', async (req, res) => {
 
     // Step 2: Claude Vision analysis (4-type slide system)
     console.log('[2/3] Claude Vision analysis (4-type slides)...');
-    const carousel = await analyzeWithClaude(base64Image, metadata, prompt);
+    const imgMimeType = detectedMimeType || 'image/jpeg';
+    const carousel = await analyzeWithClaude(base64Image, metadata, prompt, imgMimeType);
     const totalSlides = carousel.slides.length;
     console.log(`  → ${totalSlides} slides (types: ${carousel.slides.map(s => s.type).join(', ')}), "${carousel.title}"`);
 
@@ -338,7 +340,7 @@ app.post('/api/annotate', async (req, res) => {
     const renderPayload = {
       carousel,
       base64Image,
-      mimeType: 'image/jpeg',
+      mimeType: detectedMimeType || 'image/jpeg',
       formats: formatList,
       url: metadata.url,
     };
