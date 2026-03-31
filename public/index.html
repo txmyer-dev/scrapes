@@ -1045,17 +1045,36 @@
       }
 
       try {
-        var res = await fetch('/api/annotate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        var res;
+        try {
+          res = await fetch('/api/annotate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } catch (networkErr) {
+          clearInterval(statusInterval);
+          throw new Error('Could not reach the server. Check your connection.');
+        }
 
         clearInterval(statusInterval);
 
         if (!res.ok) {
-          var errData = await res.json();
-          throw new Error(errData.error || 'Request failed');
+          var errMsg;
+          try {
+            var errData = await res.json();
+            errMsg = errData.error;
+          } catch (parseErr) {
+            // Response wasn't JSON (e.g. HTML error page from gateway)
+          }
+          if (!errMsg) {
+            if (res.status === 502 || res.status === 503 || res.status === 504) {
+              errMsg = 'Server is temporarily unavailable. Try again in a moment.';
+            } else {
+              errMsg = 'Server error (' + res.status + ')';
+            }
+          }
+          throw new Error(errMsg);
         }
 
         var data = await res.json();

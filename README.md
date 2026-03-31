@@ -60,8 +60,16 @@ URL  →  Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download &
 
 🔗 **Try it live:** [scrapes.felaniam.cloud](https://scrapes.felaniam.cloud)
 
-<!-- Screenshots/GIFs here -->
-<!-- ![Demo GIF](assets/demo.gif) -->
+<p align="center">
+  <img src="assets/demo-ui.png" alt="Scrapes UI" width="720" />
+</p>
+
+<details>
+<summary>📱 Mobile view</summary>
+<p align="center">
+  <img src="assets/demo-ui-mobile.png" alt="Scrapes Mobile UI" width="320" />
+</p>
+</details>
 
 ---
 
