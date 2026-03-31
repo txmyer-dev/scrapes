@@ -343,6 +343,7 @@ app.post('/api/annotate', async (req, res) => {
       mimeType: detectedMimeType || 'image/jpeg',
       formats: formatList,
       url: metadata.url,
+      source: image ? 'upload' : 'url',
     };
 
     const renderResp = await fetch(N8N_RENDER_WEBHOOK, {
