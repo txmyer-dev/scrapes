@@ -40,42 +40,59 @@ async function compressForClaude(base64Data, inputMimeType) {
   return { base64: resized.toString('base64'), mimeType: 'image/jpeg' };
 }
 
-// --- Screenshot ---
-async function takeScreenshot(targetUrl) {
-  const resp = await fetch('https://api.urlbox.com/v1/render/sync', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${URLBOX_SECRET}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: targetUrl,
-      format: 'jpeg',
-      quality: 70,
-      width: 1280,
-      height: 800,
-      full_page: true,
-      max_height: 5000,
-      delay: 3000,
-      block_ads: true,
-      hide_cookie_banners: true,
-    }),
+// --- Screenshot via Urlbox render link ---
+function buildUrlboxUrl(targetUrl, format, width, height) {
+  const params = new URLSearchParams({
+    url: targetUrl,
+    width: String(width),
+    height: String(height),
+    full_page: 'true',
+    block_ads: 'true',
+    hide_cookie_banners: 'true',
+    retina: 'true',
+    format: format,
+    quality: '80',
+    delay: '3000',
   });
+  const token = crypto.createHmac('sha256', URLBOX_SECRET).update(params.toString()).digest('hex');
+  return `https://api.urlbox.com/v1/${URLBOX_KEY}/${token}/${format}?${params.toString()}`;
+}
 
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => '');
-    throw new Error('Urlbox failed: ' + resp.status + ' ' + errText.substring(0, 200));
+async function takeScreenshot(targetUrl, formatList) {
+  // Use the tallest selected format's dimensions for the capture viewport
+  const ratios = (formatList || ['4:5']).map(r => {
+    const [w, h] = r.split(':').map(Number);
+    return { ratio: r, w: 1080, h: Math.round(1080 * (h / w)) };
+  });
+  const tallest = ratios.reduce((a, b) => a.h > b.h ? a : b);
+
+  // Capture screenshot (retina = 2x resolution for crisp output)
+  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', tallest.w, tallest.h);
+  console.log(`  Urlbox: ${tallest.w}x${tallest.h} viewport (retina 2x → ${tallest.w * 2}x output)`);
+
+  const imgResp = await fetch(imgUrl);
+  if (!imgResp.ok) {
+    const errText = await imgResp.text().catch(() => '');
+    throw new Error('Urlbox screenshot failed: ' + imgResp.status + ' ' + errText.substring(0, 200));
+  }
+  const buffer = Buffer.from(await imgResp.arrayBuffer());
+
+  // Also fetch markdown for Claude context
+  let markdown = '';
+  try {
+    const mdUrl = buildUrlboxUrl(targetUrl, 'md', 1280, 800);
+    const mdResp = await fetch(mdUrl);
+    if (mdResp.ok) {
+      markdown = await mdResp.text();
+      // Trim to first 4000 chars to stay within Claude's context budget
+      if (markdown.length > 4000) markdown = markdown.substring(0, 4000) + '\n...(truncated)';
+      console.log(`  Markdown extracted: ${markdown.length} chars`);
+    }
+  } catch (e) {
+    console.log('  Markdown extraction failed (non-fatal):', e.message);
   }
 
-  const data = await resp.json();
-  const imageUrl = data.renderUrl;
-  if (!imageUrl) throw new Error('Urlbox returned no renderUrl');
-
-  const imgResp = await fetch(imageUrl);
-  if (!imgResp.ok) throw new Error('Failed to download Urlbox image: ' + imgResp.status);
-  const buffer = Buffer.from(await imgResp.arrayBuffer());
-  if (buffer.length > 4800000) throw new Error('Screenshot too large (' + Math.round(buffer.length / 1024 / 1024) + 'MB). Try a shorter page.');
-  return buffer.toString('base64');
+  return { base64: buffer.toString('base64'), markdown };
 }
 
 // --- Metadata ---
@@ -180,13 +197,17 @@ OTHER RULES:
 - Adapt the closer to the page type. Tools/products: "Try it" + URL. Tutorials: recap steps. Articles: TL;DR.
 - badge on opener: a short category label like "TOOL", "TUTORIAL", "BLOG", "DOCS", "PORTFOLIO" etc.`;
 
+  const markdownSection = metadata.markdown
+    ? `\nExtracted page content (markdown):\n${metadata.markdown}\n`
+    : '';
+
   const userText = `This is a full-page screenshot of ${metadata.url}.
 
 Page context:
 - Title: ${metadata.title}
 - Description: ${metadata.description}
 - Key sections: ${JSON.stringify(metadata.headings)}
-${userPrompt ? '\nUser instructions: ' + userPrompt : ''}
+${markdownSection}${userPrompt ? '\nUser instructions: ' + userPrompt : ''}
 
 Analyze this page and create the carousel slide plan using the 4-type system.`;
 
@@ -353,12 +374,12 @@ app.post('/api/annotate', async (req, res) => {
       metadata = { url: 'uploaded-image', title: 'Uploaded Image', description: '', headings: [] };
     } else {
       console.log('[1/3] Screenshot + metadata...');
-      const [screenshot, meta] = await Promise.all([
-        takeScreenshot(url),
+      const [screenshotResult, meta] = await Promise.all([
+        takeScreenshot(url, formatList),
         fetchMetadata(url),
       ]);
-      base64Image = screenshot;
-      metadata = { ...meta, url };
+      base64Image = screenshotResult.base64;
+      metadata = { ...meta, url, markdown: screenshotResult.markdown };
     }
 
     // Step 2: Claude Vision analysis (4-type slide system)
