@@ -8,9 +8,9 @@ const app = express();
 const PORT = process.env.PORT || 3100;
 const N8N_RENDER_WEBHOOK = process.env.N8N_RENDER_WEBHOOK || 'https://n8n.felaniam.cloud/webhook/scrapes-render';
 
-// ScreenshotOne credentials
-const SSO_ACCESS = process.env.SSO_ACCESS_KEY;
-const SSO_SECRET = process.env.SSO_SECRET_KEY;
+// Urlbox credentials
+const URLBOX_KEY = process.env.URLBOX_API_KEY;
+const URLBOX_SECRET = process.env.URLBOX_SECRET_KEY;
 
 // Anthropic client
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -42,25 +42,38 @@ async function compressForClaude(base64Data, inputMimeType) {
 
 // --- Screenshot ---
 async function takeScreenshot(targetUrl) {
-  const params = [
-    `access_key=${SSO_ACCESS}`,
-    `url=${encodeURIComponent(targetUrl)}`,
-    `full_page=true`,
-    `full_page_max_height=5000`,
-    `format=jpg`,
-    `image_quality=70`,
-    `viewport_width=1280`,
-    `viewport_height=800`,
-    `delay=3`,
-    `block_ads=true`,
-    `block_cookie_banners=true`,
-  ].join('&');
-  const signature = crypto.createHmac('sha256', SSO_SECRET).update(params).digest('hex');
-  const ssoUrl = `https://api.screenshotone.com/take?${params}&signature=${signature}`;
+  const resp = await fetch('https://api.urlbox.com/v1/render/sync', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${URLBOX_SECRET}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: targetUrl,
+      format: 'jpeg',
+      quality: 70,
+      width: 1280,
+      height: 800,
+      full_page: true,
+      max_height: 5000,
+      delay: 3000,
+      block_ads: true,
+      hide_cookie_banners: true,
+    }),
+  });
 
-  const resp = await fetch(ssoUrl);
-  if (!resp.ok) throw new Error('ScreenshotOne failed: ' + resp.status);
-  const buffer = Buffer.from(await resp.arrayBuffer());
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error('Urlbox failed: ' + resp.status + ' ' + errText.substring(0, 200));
+  }
+
+  const data = await resp.json();
+  const imageUrl = data.renderUrl;
+  if (!imageUrl) throw new Error('Urlbox returned no renderUrl');
+
+  const imgResp = await fetch(imageUrl);
+  if (!imgResp.ok) throw new Error('Failed to download Urlbox image: ' + imgResp.status);
+  const buffer = Buffer.from(await imgResp.arrayBuffer());
   if (buffer.length > 4800000) throw new Error('Screenshot too large (' + Math.round(buffer.length / 1024 / 1024) + 'MB). Try a shorter page.');
   return buffer.toString('base64');
 }
