@@ -380,11 +380,25 @@ app.post('/api/annotate', async (req, res) => {
       ]);
       base64Image = screenshotResult.base64;
       metadata = { ...meta, url, markdown: screenshotResult.markdown };
+      // Retina screenshots can exceed Claude's 8000px limit — downscale for analysis
+      const imgBuf = Buffer.from(base64Image, 'base64');
+      const sharpMeta = await sharp(imgBuf).metadata();
+      if (sharpMeta.width > 7999 || sharpMeta.height > 7999) {
+        console.log(`  Retina image ${sharpMeta.width}x${sharpMeta.height} exceeds 8000px, downscaling for Claude...`);
+        const scale = Math.min(7999 / sharpMeta.width, 7999 / sharpMeta.height);
+        const resized = await sharp(imgBuf)
+          .resize(Math.round(sharpMeta.width * scale), Math.round(sharpMeta.height * scale))
+          .jpeg({ quality: 75 })
+          .toBuffer();
+        claudeBase64 = resized.toString('base64');
+        claudeMimeType = 'image/jpeg';
+        console.log(`  Downscaled to ${Math.round(sharpMeta.width * scale)}x${Math.round(sharpMeta.height * scale)} (${(resized.length/1024/1024).toFixed(1)}MB)`);
+      }
     }
 
     // Step 2: Claude Vision analysis (4-type slide system)
     console.log('[2/3] Claude Vision analysis (4-type slides)...');
-    // Use compressed image for Claude (stays under 5MB), full-res for rendering
+    // Use downscaled/compressed image for Claude, full-res retina for n8n rendering
     const claudeImg = claudeBase64 || base64Image;
     const claudeMime = claudeMimeType || detectedMimeType || 'image/jpeg';
     const carousel = await analyzeWithClaude(claudeImg, metadata, prompt, claudeMime);
