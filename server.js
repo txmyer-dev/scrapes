@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const sharp = require('sharp');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
@@ -16,6 +17,28 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// --- Image compression for Claude (5MB base64 limit) ---
+const MAX_CLAUDE_BYTES = 4_800_000; // stay under 5MB with margin
+
+async function compressForClaude(base64Data, inputMimeType) {
+  const buf = Buffer.from(base64Data, 'base64');
+  if (buf.length <= MAX_CLAUDE_BYTES) return { base64: base64Data, mimeType: inputMimeType };
+
+  // Convert to JPEG at decreasing quality until under limit
+  for (const quality of [85, 70, 50]) {
+    const compressed = await sharp(buf).jpeg({ quality }).toBuffer();
+    if (compressed.length <= MAX_CLAUDE_BYTES) {
+      console.log(`  Compressed ${(buf.length/1024/1024).toFixed(1)}MB → ${(compressed.length/1024/1024).toFixed(1)}MB (JPEG q${quality})`);
+      return { base64: compressed.toString('base64'), mimeType: 'image/jpeg' };
+    }
+  }
+
+  // Last resort: resize down + low quality
+  const resized = await sharp(buf).resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 50 }).toBuffer();
+  console.log(`  Resized+compressed ${(buf.length/1024/1024).toFixed(1)}MB → ${(resized.length/1024/1024).toFixed(1)}MB`);
+  return { base64: resized.toString('base64'), mimeType: 'image/jpeg' };
+}
 
 // --- Screenshot ---
 async function takeScreenshot(targetUrl) {
@@ -301,12 +324,19 @@ app.post('/api/annotate', async (req, res) => {
 
   try {
     // Step 1: Get screenshot + metadata in parallel
-    let base64Image, metadata, detectedMimeType;
+    let base64Image, metadata, detectedMimeType, claudeBase64, claudeMimeType;
     if (image) {
       const match = image.match(/^data:([^;]+);base64,(.+)$/);
       if (!match) throw new Error('Invalid image data');
-      detectedMimeType = match[1];
-      base64Image = match[2];
+      const rawBase64 = match[2];
+      const rawMime = match[1];
+      // Compress if needed for Claude's 5MB limit
+      const compressed = await compressForClaude(rawBase64, rawMime);
+      detectedMimeType = rawMime; // keep original mime for n8n render
+      base64Image = rawBase64;    // keep full-res for n8n render
+      // Store compressed version for Claude only
+      claudeBase64 = compressed.base64;
+      claudeMimeType = compressed.mimeType;
       metadata = { url: 'uploaded-image', title: 'Uploaded Image', description: '', headings: [] };
     } else {
       console.log('[1/3] Screenshot + metadata...');
@@ -320,8 +350,10 @@ app.post('/api/annotate', async (req, res) => {
 
     // Step 2: Claude Vision analysis (4-type slide system)
     console.log('[2/3] Claude Vision analysis (4-type slides)...');
-    const imgMimeType = detectedMimeType || 'image/jpeg';
-    const carousel = await analyzeWithClaude(base64Image, metadata, prompt, imgMimeType);
+    // Use compressed image for Claude (stays under 5MB), full-res for rendering
+    const claudeImg = claudeBase64 || base64Image;
+    const claudeMime = claudeMimeType || detectedMimeType || 'image/jpeg';
+    const carousel = await analyzeWithClaude(claudeImg, metadata, prompt, claudeMime);
     const totalSlides = carousel.slides.length;
     console.log(`  → ${totalSlides} slides (types: ${carousel.slides.map(s => s.type).join(', ')}), "${carousel.title}"`);
 
