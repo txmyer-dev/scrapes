@@ -828,8 +828,8 @@
     });
 
     function handleSourceImage(file) {
-      if (file.size > 10 * 1024 * 1024) {
-        errorEl.textContent = 'Image must be under 10MB.';
+      if (file.size > 5 * 1024 * 1024) {
+        errorEl.textContent = 'Image exceeds the 5MB limit (' + (file.size / 1024 / 1024).toFixed(1) + 'MB). Please use a smaller or compressed image.';
         errorEl.classList.add('visible');
         return;
       }
