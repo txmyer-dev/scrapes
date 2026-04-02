@@ -910,6 +910,37 @@
       body.appendChild(errDiv);
     }
 
+    // Fire a single format request and return its result
+    async function generateOneFormat(p, url, sourceImage, userPrompt) {
+      var payload = { formats: [p.ratio], prompt: userPrompt, logo: logoBase64 || undefined };
+      if (inputMode === 'url') {
+        payload.url = url;
+      } else {
+        payload.image = sourceImage;
+      }
+
+      var res = await fetch('/api/annotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        var errMsg;
+        try { var errData = await res.json(); errMsg = errData.error; } catch (e) {}
+        if (!errMsg) {
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            errMsg = 'Server temporarily unavailable.';
+          } else {
+            errMsg = 'Server error (' + res.status + ')';
+          }
+        }
+        throw new Error(errMsg);
+      }
+
+      return await res.json();
+    }
+
     async function generate() {
       var url = '';
       var sourceImage = '';
@@ -946,6 +977,14 @@
       if (genBtnImg) genBtnImg.disabled = true;
       imageGrid.textContent = '';
       generatedImages = [];
+      slideData = [];
+      currentSlideIndex = 0;
+      // Remove old slide navs
+      document.querySelectorAll('.slide-nav').forEach(function(n) { n.remove(); });
+
+      var startTime = Date.now();
+      var userPrompt = promptInput.value.trim();
+      var label = inputMode === 'url' ? url : 'uploaded image';
 
       // Cycle status messages
       var msgIndex = 0;
@@ -958,82 +997,56 @@
         statusText.textContent = msgs[msgIndex];
       }, 5000);
 
-      // Create placeholder cards
-      selected.forEach(function(p) {
-        imageGrid.appendChild(buildCardElement(p, 'loading'));
-      });
-
       resultsEl.classList.add('visible');
-      resultsTitle.textContent = 'Generating...';
-      var label = inputMode === 'url' ? url : 'uploaded image';
-      resultsInfo.textContent = label + ' \u2014 ' + selected.length + ' format' + (selected.length > 1 ? 's' : '');
-      costBadge.textContent = '~$0.03 est.';
+      resultsTitle.textContent = 'Generating ' + selected.length + ' format' + (selected.length > 1 ? 's' : '') + '...';
+      resultsInfo.textContent = label;
+      costBadge.textContent = '~$' + (0.03 * selected.length).toFixed(2) + ' est.';
 
-      var startTime = Date.now();
-      var userPrompt = promptInput.value.trim();
-
-      // Deduplicate ratios
-      var ratioMap = {};
+      // Create a section per format with placeholder cards
+      var formatSections = {};
       selected.forEach(function(p) {
-        if (!ratioMap[p.ratio]) ratioMap[p.ratio] = [];
-        ratioMap[p.ratio].push(p);
+        var section = document.createElement('div');
+        section.id = 'format-section-' + p.id;
+        section.style.cssText = 'margin-bottom:2rem;';
+
+        var header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;';
+        var dot = document.createElement('div');
+        dot.id = 'format-dot-' + p.id;
+        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(205,189,255,0.4);animation:spin 1.5s linear infinite;';
+        var title = document.createElement('span');
+        title.style.cssText = 'font-family:Space Grotesk,sans-serif;font-weight:600;font-size:0.9rem;color:#cbc3d9;';
+        title.textContent = p.name + ' (' + p.w + '\u00D7' + p.h + ')';
+        var statusSpan = document.createElement('span');
+        statusSpan.id = 'format-status-' + p.id;
+        statusSpan.style.cssText = 'font-size:0.75rem;color:#948da2;margin-left:auto;';
+        statusSpan.textContent = 'generating...';
+        header.appendChild(dot);
+        header.appendChild(title);
+        header.appendChild(statusSpan);
+        section.appendChild(header);
+
+        var grid = document.createElement('div');
+        grid.className = 'image-grid';
+        grid.id = 'format-grid-' + p.id;
+        section.appendChild(grid);
+
+        imageGrid.appendChild(section);
+        formatSections[p.id] = { section: section, grid: grid };
       });
-      var uniqueFormats = Object.keys(ratioMap);
 
-      var payload = { formats: uniqueFormats, prompt: userPrompt, logo: logoBase64 || undefined };
-      if (inputMode === 'url') {
-        payload.url = url;
-      } else {
-        payload.image = sourceImage;
-      }
+      // Fire all format requests in parallel
+      var completedCount = 0;
+      var promises = selected.map(function(p) {
+        return generateOneFormat(p, url, sourceImage, userPrompt).then(function(data) {
+          // Success — populate this format's section
+          var dot = document.getElementById('format-dot-' + p.id);
+          var statusSpan = document.getElementById('format-status-' + p.id);
+          if (dot) dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#bdf4ff;box-shadow:0 0 8px rgba(0,227,253,0.8);';
+          if (statusSpan) statusSpan.textContent = data.slides.length + ' slides';
 
-      try {
-        var res;
-        try {
-          res = await fetch('/api/annotate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-        } catch (networkErr) {
-          clearInterval(statusInterval);
-          throw new Error('Could not reach the server. Check your connection.');
-        }
-
-        clearInterval(statusInterval);
-
-        if (!res.ok) {
-          var errMsg;
-          try {
-            var errData = await res.json();
-            errMsg = errData.error;
-          } catch (parseErr) {
-            // Response wasn't JSON (e.g. HTML error page from gateway)
-          }
-          if (!errMsg) {
-            if (res.status === 502 || res.status === 503 || res.status === 504) {
-              errMsg = 'Server is temporarily unavailable. Try again in a moment.';
-            } else {
-              errMsg = 'Server error (' + res.status + ')';
-            }
-          }
-          throw new Error(errMsg);
-        }
-
-        var data = await res.json();
-
-        if (!data.slides || data.slides.length === 0) {
-          throw new Error('No slides returned');
-        }
-
-        // Store slide data for navigation
-        slideData = data.slides;
-        currentSlideIndex = 0;
-
-        // Build generatedImages from all slides for download/lightbox
-        generatedImages = [];
-        slideData.forEach(function(slide) {
-          selected.forEach(function(p) {
+          var grid = formatSections[p.id].grid;
+          data.slides.forEach(function(slide) {
             var img = slide.images[p.ratio];
             if (img) {
               generatedImages.push({
@@ -1044,128 +1057,78 @@
                 ratio: p.ratio,
                 image: img
               });
+
+              var card = buildCardElement(p, 'loaded');
+              card.id = 'card-' + p.id + '-s' + slide.slideNumber;
+              grid.appendChild(card);
+
+              // Set image
+              var body = card.querySelector('.card-body');
+              body.textContent = '';
+              var imgEl = document.createElement('img');
+              imgEl.src = img;
+              imgEl.alt = p.name + ' slide ' + slide.slideNumber;
+              (function(imgData, platformId, slideNum) {
+                imgEl.addEventListener('click', function() {
+                  var lbIdx = generatedImages.findIndex(function(gi) { return gi.slideNumber === slideNum && gi.ratio === p.ratio; });
+                  if (lbIdx !== -1) { updateLightbox(lbIdx); lightbox.classList.add('visible'); document.body.style.overflow = 'hidden'; }
+                });
+                var dlBtn = card.querySelector('.card-download');
+                if (dlBtn) {
+                  dlBtn.style.display = '';
+                  dlBtn.onclick = function() {
+                    var a = document.createElement('a');
+                    a.href = imgData;
+                    var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
+                    a.download = 'scrapes_' + domain + '_slide' + slideNum + '_' + platformId + '.png';
+                    a.click();
+                  };
+                }
+              })(img, p.id, slide.slideNumber);
+
+              body.appendChild(imgEl);
+
+              // Slide label
+              var slideLabel = document.createElement('div');
+              slideLabel.style.cssText = 'padding:0.4rem 0.8rem;font-size:0.75rem;color:#948da2;border-top:1px solid rgba(73,68,86,0.3);';
+              slideLabel.textContent = 'Slide ' + slide.slideNumber + ': ' + (slide.title || slide.type);
+              card.appendChild(slideLabel);
             }
           });
+
+          completedCount++;
+          var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          resultsTitle.textContent = completedCount + '/' + selected.length + ' formats \u00B7 ' + generatedImages.length + ' images';
+          resultsInfo.textContent = label + ' \u2014 ' + elapsed + 's';
+        }).catch(function(err) {
+          // Error for this format — mark it failed, others continue
+          var dot = document.getElementById('format-dot-' + p.id);
+          var statusSpan = document.getElementById('format-status-' + p.id);
+          if (dot) dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#ffb4ab;box-shadow:0 0 8px rgba(255,180,171,0.6);';
+          if (statusSpan) { statusSpan.textContent = 'failed'; statusSpan.style.color = '#ffb4ab'; }
+
+          var grid = formatSections[p.id].grid;
+          var errDiv = document.createElement('div');
+          errDiv.className = 'card-error';
+          errDiv.style.cssText = 'padding:1.5rem;color:#ffb4ab;font-size:0.85rem;text-align:center;';
+          errDiv.textContent = err.message;
+          grid.appendChild(errDiv);
+
+          completedCount++;
         });
+      });
 
-        // Show first slide
-        showSlide(0, selected);
-
-        var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        var totalImages = generatedImages.length;
-        resultsTitle.textContent = slideData.length + ' slides \u00B7 ' + totalImages + ' images';
-        resultsInfo.textContent = label + ' \u2014 ' + elapsed + 's';
-        costBadge.textContent = '~$0.0' + (3 + slideData.length);
-      } catch (err) {
+      Promise.all(promises).then(function() {
         clearInterval(statusInterval);
-        selected.forEach(function(p) { setCardError(p.id, err.message); });
-        errorEl.textContent = err.message;
-        errorEl.classList.add('visible');
-      } finally {
         statusEl.classList.remove('visible');
         generateBtn.disabled = false;
         var genBtnImg2 = document.getElementById('generate-btn-img');
         if (genBtnImg2) genBtnImg2.disabled = false;
-      }
-    }
 
-    function showSlide(index, selected) {
-      if (!slideData.length) return;
-      currentSlideIndex = index;
-      var slide = slideData[index];
-      imageGrid.textContent = '';
-
-      // Slide navigation bar
-      var nav = document.createElement('div');
-      nav.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-bottom:1rem;';
-
-      var prevBtn = document.createElement('button');
-      prevBtn.textContent = '\u2039';
-      prevBtn.style.cssText = 'background:rgba(52,52,62,0.4);border:1px solid rgba(73,68,86,0.3);color:#e4e1ee;width:36px;height:36px;border-radius:50%;font-size:1.2rem;cursor:pointer;display:' + (slideData.length > 1 ? 'block' : 'none');
-      prevBtn.addEventListener('click', function() {
-        var prev = (currentSlideIndex - 1 + slideData.length) % slideData.length;
-        showSlide(prev, selected || getSelectedPlatforms());
-      });
-
-      var slideLabel = document.createElement('div');
-      slideLabel.style.cssText = 'text-align:center;';
-      var slideNum = document.createElement('span');
-      slideNum.style.cssText = 'display:inline-block;background:linear-gradient(135deg,#5d21df,#00e3fd);color:white;width:28px;height:28px;line-height:28px;border-radius:50%;font-size:0.85rem;font-weight:700;margin-right:0.5rem;';
-      slideNum.textContent = slide.slideNumber;
-      var slideTitle = document.createElement('span');
-      slideTitle.style.cssText = 'color:#e4e1ee;font-size:0.95rem;font-weight:600;font-family:Space Grotesk,sans-serif;';
-      slideTitle.textContent = slide.title || ('Slide ' + slide.slideNumber);
-      var slideCount = document.createElement('span');
-      slideCount.style.cssText = 'color:#948da2;font-size:0.8rem;margin-left:0.5rem;';
-      slideCount.textContent = slide.slideNumber + '/' + slideData.length;
-      slideLabel.appendChild(slideNum);
-      slideLabel.appendChild(slideTitle);
-      slideLabel.appendChild(slideCount);
-
-      var nextBtn = document.createElement('button');
-      nextBtn.textContent = '\u203A';
-      nextBtn.style.cssText = prevBtn.style.cssText;
-      nextBtn.addEventListener('click', function() {
-        var next = (currentSlideIndex + 1) % slideData.length;
-        showSlide(next, selected || getSelectedPlatforms());
-      });
-
-      nav.appendChild(prevBtn);
-      nav.appendChild(slideLabel);
-      nav.appendChild(nextBtn);
-      imageGrid.parentNode.insertBefore(nav, imageGrid);
-
-      // Remove old nav if exists
-      var oldNavs = imageGrid.parentNode.querySelectorAll('.slide-nav');
-      oldNavs.forEach(function(n) { n.remove(); });
-      nav.className = 'slide-nav';
-
-      // Dot indicators
-      if (slideData.length > 1) {
-        var dots = document.createElement('div');
-        dots.className = 'slide-nav';
-        dots.style.cssText = 'display:flex;justify-content:center;gap:6px;margin-bottom:1rem;';
-        slideData.forEach(function(s, i) {
-          var dot = document.createElement('div');
-          dot.style.cssText = 'width:8px;height:8px;border-radius:50%;cursor:pointer;transition:all 0.2s;background:' + (i === index ? 'linear-gradient(135deg,#5d21df,#00e3fd)' : 'rgba(73,68,86,0.5)');
-          dot.addEventListener('click', function() { showSlide(i, selected || getSelectedPlatforms()); });
-          dots.appendChild(dot);
-        });
-        imageGrid.parentNode.insertBefore(dots, imageGrid);
-      }
-
-      // Show format cards for this slide
-      var platforms = selected || getSelectedPlatforms();
-      platforms.forEach(function(p) {
-        var img = slide.images[p.ratio];
-        var card = buildCardElement(p, img ? 'loaded' : 'error');
-        imageGrid.appendChild(card);
-        if (img) {
-          setCardLoaded(p.id, img);
-          // Override the card's download to use slide-specific ID
-          var dlBtn = card.querySelector('.card-download');
-          if (dlBtn) {
-            dlBtn.onclick = function() {
-              var a = document.createElement('a');
-              a.href = img;
-              var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
-              a.download = 'scrapes_' + domain + '_slide' + slide.slideNumber + '_' + p.id + '.png';
-              a.click();
-            };
-          }
-          // Override click for lightbox
-          var cardImg = card.querySelector('.card-body img');
-          if (cardImg) {
-            (function(slideNum, ratio) {
-              cardImg.onclick = function() {
-                var lbIdx = generatedImages.findIndex(function(gi) { return gi.slideNumber === slideNum && gi.ratio === ratio; });
-                if (lbIdx !== -1) { updateLightbox(lbIdx); lightbox.classList.add('visible'); document.body.style.overflow = 'hidden'; }
-              };
-            })(slide.slideNumber, p.ratio);
-          }
-        } else {
-          setCardError(p.id, 'No image for this format');
-        }
+        var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        resultsTitle.textContent = generatedImages.length + ' images across ' + selected.length + ' format' + (selected.length > 1 ? 's' : '');
+        resultsInfo.textContent = label + ' \u2014 ' + elapsed + 's';
+        costBadge.textContent = '~$' + (0.03 * selected.length).toFixed(2);
       });
     }
 
