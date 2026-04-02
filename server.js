@@ -59,16 +59,13 @@ function buildUrlboxUrl(targetUrl, format, width, height) {
 }
 
 async function takeScreenshot(targetUrl, formatList) {
-  // Use the tallest selected format's dimensions for the capture viewport
-  const ratios = (formatList || ['4:5']).map(r => {
-    const [w, h] = r.split(':').map(Number);
-    return { ratio: r, w: 1080, h: Math.round(1080 * (h / w)) };
-  });
-  const tallest = ratios.reduce((a, b) => a.h > b.h ? a : b);
+  // Always use a standard desktop viewport — format dimensions only matter at render/crop time
+  const vpWidth = 1280;
+  const vpHeight = 800;
 
   // Capture screenshot (retina = 2x resolution for crisp output)
-  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', tallest.w, tallest.h);
-  console.log(`  Urlbox: ${tallest.w}x${tallest.h} viewport (retina 2x → ${tallest.w * 2}x output)`);
+  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', vpWidth, vpHeight);
+  console.log(`  Urlbox: ${vpWidth}x${vpHeight} viewport (retina 2x → ${vpWidth * 2}px wide)`);
 
   const imgResp = await fetch(imgUrl);
   if (!imgResp.ok) {
