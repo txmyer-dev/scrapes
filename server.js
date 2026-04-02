@@ -59,13 +59,16 @@ function buildUrlboxUrl(targetUrl, format, width, height) {
 }
 
 async function takeScreenshot(targetUrl, formatList) {
-  // Always use a standard desktop viewport — format dimensions only matter at render/crop time
-  const vpWidth = 1280;
-  const vpHeight = 800;
+  // Use the tallest selected format as viewport — vertical capture for vertical social output
+  const ratios = (formatList || ['4:5']).map(r => {
+    const [w, h] = r.split(':').map(Number);
+    return { ratio: r, w: 1080, h: Math.round(1080 * (h / w)) };
+  });
+  const tallest = ratios.reduce((a, b) => a.h > b.h ? a : b);
 
   // Capture screenshot (retina = 2x resolution for crisp output)
-  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', vpWidth, vpHeight);
-  console.log(`  Urlbox: ${vpWidth}x${vpHeight} viewport (retina 2x → ${vpWidth * 2}px wide)`);
+  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', tallest.w, tallest.h);
+  console.log(`  Urlbox: ${tallest.w}x${tallest.h} viewport (retina 2x → ${tallest.w * 2}x${tallest.h * 2} output)`);
 
   const imgResp = await fetch(imgUrl);
   if (!imgResp.ok) {
