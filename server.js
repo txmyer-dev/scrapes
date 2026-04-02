@@ -109,15 +109,16 @@ async function fetchMetadata(targetUrl) {
   }
 }
 
-// --- Claude Vision (4-type slide system) ---
+// --- Claude Vision (3-type slide system) ---
 async function analyzeWithClaude(base64Image, metadata, userPrompt, mimeType = 'image/jpeg') {
-  const systemPrompt = `You are an expert at creating tutorial image carousels from webpage screenshots. You produce 4 types of slides:
+  const systemPrompt = `You are an expert at creating tutorial image carousels from webpage screenshots. You produce exactly 5 slides using 3 types:
 
 SLIDE TYPES:
-1. "opener" — Pure text title card. Establishes what this page/tool/article is about. Always slide 1.
-2. "scene" — Screenshot crop with annotations. Shows a specific section of the page with highlights, arrows, and callouts. The workhorse — most slides are this type.
-3. "insight" — Pure text slide for key takeaways, stats, comparisons, or quotes that are cleaner as text than as a screenshot crop. OPTIONAL — only include when the content has a clear takeaway worth pulling out.
-4. "closer" — Contextual ending. Adapts to content type: "Try it" for tools, "Key steps" recap for tutorials, "TL;DR" for articles. Always the last slide.
+1. "opener" — Text card with title AND key takeaways. Establishes what this page is about AND why it matters. Combines headline + 3 bullet points. Always slide 1.
+2. "scene" — Screenshot crop with annotations. Shows a specific section of the page with highlights, arrows, and callouts. The workhorse. Always slides 2, 3, and 4.
+3. "closer" — Contextual ending. Adapts to content type: "Try it" for tools, "Key steps" recap for tutorials, "TL;DR" for articles. Always slide 5.
+
+STRUCTURE: Always produce EXACTLY 5 slides: 1 opener + 3 scenes + 1 closer.
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {
@@ -131,7 +132,9 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
       "type": "opener",
       "title": "Big headline for the opener",
       "subtitle": "One supporting line",
-      "badge": "SHORT LABEL"
+      "badge": "SHORT LABEL",
+      "bullets": ["Key insight or feature #1", "Key insight or feature #2", "Key insight or feature #3"],
+      "icon": "lightbulb|chart|quote|list|star|check"
     },
     {
       "slideNumber": 2,
@@ -145,14 +148,7 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
       ]
     },
     {
-      "slideNumber": 3,
-      "type": "insight",
-      "title": "Key Insight Title",
-      "bullets": ["First point here", "Second point here", "Third point here"],
-      "icon": "lightbulb|chart|quote|list|star|check"
-    },
-    {
-      "slideNumber": 4,
+      "slideNumber": 5,
       "type": "closer",
       "title": "Try it yourself",
       "body": "Short closing line or recap",
@@ -162,10 +158,14 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 }
 
 RULES:
-- ALWAYS start with an opener (slide 1) and end with a closer (last slide)
+- ALWAYS produce exactly 5 slides: opener (1) + scene (2) + scene (3) + scene (4) + closer (5)
+- The opener MUST include 3 bullets summarizing the page's key value props or takeaways
+- NEVER produce "insight" type slides — fold all insights into the opener bullets
 
 CRITICAL SCENE RULES — ANNOTATION QUALITY:
-- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. NEVER more than 20%. Tight crops = readable content.
+- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. ABSOLUTELY NEVER more than 20%. If you exceed 20%, the slide will have dead space and look broken.
+- NEVER crop into empty/blank/white areas of the page. Every pixel of the crop should contain visible content. If the page is short, use smaller crops focused on dense content areas rather than stretching to cover empty space.
+- The rendered slide should be FILLED with content edge to edge. No large blank areas. If a section has padding or whitespace below it, end the crop BEFORE the whitespace.
 - Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full page.
 - 2-4 annotations per scene slide. Fewer, precise annotations beat many scattered ones.
 
@@ -192,10 +192,10 @@ COLOR RULES:
 
 OTHER RULES:
 - Crop regions should NOT overlap — cover different sections of the page
-- Insight slides are OPTIONAL. Only include when there's a genuine takeaway worth pulling out as text. Don't force them.
-- Total slides: 3-6 depending on content density.
+- Total slides: ALWAYS exactly 5. No more, no less.
 - Adapt the closer to the page type. Tools/products: "Try it" + URL. Tutorials: recap steps. Articles: TL;DR.
-- badge on opener: a short category label like "TOOL", "TUTORIAL", "BLOG", "DOCS", "PORTFOLIO" etc.`;
+- badge on opener: a short category label like "TOOL", "TUTORIAL", "BLOG", "DOCS", "PORTFOLIO" etc.
+- opener bullets: 3 concise points (max 50 chars each) that make the viewer want to swipe. Think "what's interesting about this page?" not "what sections does it have?".`;
 
   const markdownSection = metadata.markdown
     ? `\nExtracted page content (markdown):\n${metadata.markdown}\n`
@@ -254,55 +254,38 @@ function buildOpenerHtml(slide, carousel, W, H, totalSlides) {
   const badge = escHtml(slide.badge || carousel.pageType || '');
   const title = escHtml(slide.title || carousel.title || '');
   const subtitle = escHtml(slide.subtitle || carousel.subtitle || '');
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-${FONT_IMPORT}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { width: ${W}px; height: ${H}px; overflow: hidden; background: #0a0a0a; font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: ${Math.round(W * 0.08)}px; position: relative; }
-body::before { content: ''; position: absolute; top: -40%; left: -20%; width: 140%; height: 100%; background: radial-gradient(ellipse at 30% 20%, ${cs.primary}22, transparent 60%), radial-gradient(ellipse at 70% 80%, ${cs.secondary}18, transparent 50%); pointer-events: none; }
-.badge { display: inline-block; background: ${cs.primary}; color: white; font-size: ${Math.round(W * 0.018)}px; font-weight: 700; letter-spacing: 0.12em; padding: ${Math.round(H * 0.008)}px ${Math.round(W * 0.025)}px; border-radius: 6px; margin-bottom: ${Math.round(H * 0.025)}px; text-transform: uppercase; position: relative; z-index: 1; }
-.title { font-size: ${Math.round(W * 0.065)}px; font-weight: 800; color: #f0f0f0; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: ${Math.round(H * 0.02)}px; max-width: 90%; position: relative; z-index: 1; }
-.subtitle { font-size: ${Math.round(W * 0.026)}px; font-weight: 400; color: rgba(255,255,255,0.55); line-height: 1.5; max-width: 80%; position: relative; z-index: 1; }
-.accent-line { width: ${Math.round(W * 0.08)}px; height: 4px; background: ${cs.primary}; border-radius: 2px; margin: ${Math.round(H * 0.025)}px auto; position: relative; z-index: 1; }
-.counter { position: absolute; bottom: ${Math.round(H * 0.03)}px; right: ${Math.round(W * 0.04)}px; font-size: ${Math.round(W * 0.018)}px; color: rgba(255,255,255,0.25); font-weight: 600; }
-</style></head><body>
-<div class="badge">${badge}</div>
-<div class="title">${title}</div>
-<div class="accent-line"></div>
-<div class="subtitle">${subtitle}</div>
-<div class="counter">${slide.slideNumber}/${totalSlides}</div>
-</body></html>`;
-}
-
-function buildInsightHtml(slide, carousel, W, H, totalSlides) {
-  const cs = carousel.colorScheme;
-  const title = escHtml(slide.title || 'Key Takeaway');
   const bullets = slide.bullets || [];
   const iconKey = slide.icon || 'lightbulb';
   const iconSvg = ICON_SVG[iconKey] || ICON_SVG.lightbulb;
 
   const bulletHtml = bullets.map((b, i) => `
     <div class="bullet">
-      <div class="bullet-num">${i + 1}</div>
+      <div class="bullet-dot" style="background:${cs.primary}"></div>
       <div class="bullet-text">${escHtml(b)}</div>
     </div>`).join('');
+
+  const hasBullets = bullets.length > 0;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 ${FONT_IMPORT}
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { width: ${W}px; height: ${H}px; overflow: hidden; background: #0a0a0a; font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; padding: ${Math.round(W * 0.08)}px; position: relative; }
-body::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 50% 0%, ${cs.primary}15, transparent 60%); pointer-events: none; }
-.icon { color: ${cs.primary}; margin-bottom: ${Math.round(H * 0.02)}px; position: relative; z-index: 1; }
-.title { font-size: ${Math.round(W * 0.045)}px; font-weight: 800; color: #f0f0f0; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: ${Math.round(H * 0.04)}px; position: relative; z-index: 1; }
-.bullets { display: flex; flex-direction: column; gap: ${Math.round(H * 0.025)}px; position: relative; z-index: 1; flex: 1; justify-content: center; }
-.bullet { display: flex; align-items: flex-start; gap: ${Math.round(W * 0.03)}px; }
-.bullet-num { width: ${Math.round(W * 0.045)}px; height: ${Math.round(W * 0.045)}px; min-width: ${Math.round(W * 0.045)}px; background: ${cs.primary}25; color: ${cs.primary}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ${Math.round(W * 0.022)}px; font-weight: 700; margin-top: 2px; }
-.bullet-text { font-size: ${Math.round(W * 0.028)}px; color: rgba(255,255,255,0.85); line-height: 1.5; font-weight: 400; }
+body { width: ${W}px; height: ${H}px; overflow: hidden; background: #0a0a0a; font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: ${Math.round(W * 0.08)}px; position: relative; }
+body::before { content: ''; position: absolute; top: -40%; left: -20%; width: 140%; height: 100%; background: radial-gradient(ellipse at 30% 20%, ${cs.primary}22, transparent 60%), radial-gradient(ellipse at 70% 80%, ${cs.secondary}18, transparent 50%); pointer-events: none; }
+.badge { display: inline-block; background: ${cs.primary}; color: white; font-size: ${Math.round(W * 0.018)}px; font-weight: 700; letter-spacing: 0.12em; padding: ${Math.round(H * 0.006)}px ${Math.round(W * 0.025)}px; border-radius: 6px; margin-bottom: ${Math.round(H * 0.018)}px; text-transform: uppercase; position: relative; z-index: 1; }
+.title { font-size: ${Math.round(W * 0.058)}px; font-weight: 800; color: #f0f0f0; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: ${Math.round(H * 0.012)}px; max-width: 90%; position: relative; z-index: 1; }
+.subtitle { font-size: ${Math.round(W * 0.024)}px; font-weight: 400; color: rgba(255,255,255,0.55); line-height: 1.5; max-width: 80%; position: relative; z-index: 1; }
+.accent-line { width: ${Math.round(W * 0.08)}px; height: 3px; background: ${cs.primary}; border-radius: 2px; margin: ${Math.round(H * 0.018)}px auto; position: relative; z-index: 1; }
+.bullets { display: flex; flex-direction: column; gap: ${Math.round(H * 0.015)}px; position: relative; z-index: 1; margin-top: ${Math.round(H * 0.025)}px; text-align: left; width: 80%; }
+.bullet { display: flex; align-items: flex-start; gap: ${Math.round(W * 0.025)}px; }
+.bullet-dot { width: 8px; height: 8px; min-width: 8px; border-radius: 50%; margin-top: ${Math.round(W * 0.012)}px; }
+.bullet-text { font-size: ${Math.round(W * 0.025)}px; color: rgba(255,255,255,0.8); line-height: 1.5; font-weight: 400; }
 .counter { position: absolute; bottom: ${Math.round(H * 0.03)}px; right: ${Math.round(W * 0.04)}px; font-size: ${Math.round(W * 0.018)}px; color: rgba(255,255,255,0.25); font-weight: 600; }
 </style></head><body>
-<div class="icon">${iconSvg}</div>
+<div class="badge">${badge}</div>
 <div class="title">${title}</div>
-<div class="bullets">${bulletHtml}</div>
+<div class="accent-line"></div>
+<div class="subtitle">${subtitle}</div>
+${hasBullets ? `<div class="bullets">${bulletHtml}</div>` : ''}
 <div class="counter">${slide.slideNumber}/${totalSlides}</div>
 </body></html>`;
 }
@@ -340,7 +323,6 @@ function buildPureSlideHtml(slide, carousel, ratioStr, totalSlides) {
 
   switch (slide.type) {
     case 'opener': return buildOpenerHtml(slide, carousel, W, H, totalSlides);
-    case 'insight': return buildInsightHtml(slide, carousel, W, H, totalSlides);
     case 'closer': return buildCloserHtml(slide, carousel, W, H, totalSlides);
     default: return null;
   }
@@ -417,15 +399,15 @@ app.post('/api/annotate', async (req, res) => {
     }
 
     // Step 4: Send to n8n for rendering (scene slides use crop+annotate, pure slides use provided HTML)
-    // Downscale retina image to 1080px wide for n8n — it only needs output-res for cropping
+    // Downscale retina image for n8n payload — keep proportions, use high quality
     let renderImage = base64Image;
     if (!image) {
       const renderBuf = Buffer.from(base64Image, 'base64');
       const renderMeta = await sharp(renderBuf).metadata();
-      if (renderMeta.width > 1080) {
-        const scaled = await sharp(renderBuf).resize(1080).jpeg({ quality: 85 }).toBuffer();
+      if (renderMeta.width > 1280) {
+        const scaled = await sharp(renderBuf).resize(1280).png().toBuffer();
         renderImage = scaled.toString('base64');
-        console.log(`  Render image: ${renderMeta.width}x${renderMeta.height} → 1080px wide (${(scaled.length/1024/1024).toFixed(1)}MB)`);
+        console.log(`  Render image: ${renderMeta.width}x${renderMeta.height} → 1280px wide (${(scaled.length/1024/1024).toFixed(1)}MB)`);
       }
     }
     const renderPayload = {
