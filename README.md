@@ -1,4 +1,4 @@
-# ⚡ Scrapes
+# Scrapes
 
 ### Paste a URL. Get tutorial-ready carousel images. No design skills needed.
 
@@ -8,64 +8,68 @@ Built for the **Scrapes.ai x Hostinger Hackathon 2026** · Live at **[scrapes.fe
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
 Every day, creators, educators, and marketers see web content they want to share — a tool launch, a tutorial, a landing page breakdown. But turning that into engaging visual content means:
 
 - Screenshotting manually and cropping sections
 - Opening Canva/Figma and placing elements one by one
 - Writing callouts, drawing arrows, picking colors
-- Resizing everything for each platform (IG Feed ≠ TikTok ≠ Pinterest)
+- Resizing everything for each platform
 - Repeating the entire process per format
 
-**A 5-minute insight becomes a 45-minute design task.** Most people just don't bother — and the content never gets made.
+**A 5-minute insight becomes a 45-minute design task.** Most people just don't bother.
 
 ---
 
-## 💡 The Solution
+## The Solution
 
-**Scrapes** eliminates the entire design step. Give it a URL, pick your platforms, and it delivers annotated carousel images — with intelligent highlights, arrows, callouts, and a cohesive color scheme — rendered and ready to post.
+**Scrapes** eliminates the entire design step. Give it a URL, pick your formats, and it delivers annotated carousel images — with intelligent highlights, arrows, callouts, and a cohesive color scheme — rendered and ready to post.
 
 No templates. No drag-and-drop. No design decisions. Claude Vision *sees* the page, *understands* what matters, and *builds* the carousel for you.
 
 ```
-URL  →  Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download & Post
+URL  →  Retina Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download & Post
 ```
 
 ---
 
-## ✨ Features
+## Features
 
-- **4-Type Slide System** — Opener → Scene → Insight → Closer. Each carousel tells a story, not just a screenshot dump
-- **5 Platform Formats** — Instagram Feed (4:5), IG Stories (9:16), TikTok (9:16), Pinterest (2:3), Snapchat (9:16)
-- **One-Pass Intelligence** — Claude Vision analyzes once, renders to any ratio. 1 format or 5 = same ~$0.03 API cost
-- **Smart Ratio Deduplication** — IG Stories, TikTok, and Snapchat share 9:16? Rendered once, served three ways
+- **3-Type, 5-Slide System** — Opener → Scene → Scene → Scene → Closer. Every carousel tells a story arc in exactly 5 slides
+- **Opener with Bullets** — Title card combines headline + 3 key takeaways, replacing the old separate insight slide
+- **3 Vertical Formats** — Portrait (3:4), Social (4:5), Story (9:16) — pick one or all
+- **One-Pass Intelligence** — Claude Vision analyzes once, renders to any ratio. 1 format or 3 = same ~$0.03 API cost
+- **Retina Screenshots** — Urlbox captures at 2x DPI for crisp, high-resolution output
+- **Tight Crop Regions** — Scene slides fill edge-to-edge with content, no dead space
+- **Parallel Format Rendering** — Each format renders independently with its own viewport-matched screenshot
 - **User-Guided Focus** — Tell it what to highlight: *"Focus on the pricing table"* or *"Annotate the signup flow"*
 - **Auto Color Extraction** — Pulls the page's brand palette for cohesive, on-brand annotations
-- **Batch Download** — One click to grab every generated image
+- **Smart Image Compression** — Retina images auto-downscale for Claude's 5MB/8000px limits, full-res preserved for rendering
 - **Image Upload Support** — Don't have a URL? Drop in a screenshot directly
-- **Dark, Minimal UI** — Clean interface that stays out of your way
+- **Batch Download** — One click to grab every generated image
+- **Glassmorphism UI** — Dark, minimal interface with frosted glass effects and Material Design 3 color system
 
 ---
 
-## 🎬 Demo
+## Demo
 
 | Step | What Happens |
 |------|-------------|
 | **1. Paste** | Drop any URL into the input field |
-| **2. Select** | Check the platforms you want (multi-select) |
+| **2. Select** | Check the formats you want (3:4, 4:5, 9:16) |
 | **3. Guide** *(optional)* | Add a prompt to steer what Claude focuses on |
 | **4. Generate** | Hit go — results appear in ~15 seconds |
-| **5. Download** | Grab individual images or batch download all |
+| **5. Browse** | Scroll through results in a horizontal carousel layout |
 
-🔗 **Try it live:** [scrapes.felaniam.cloud](https://scrapes.felaniam.cloud)
+**Try it live:** [scrapes.felaniam.cloud](https://scrapes.felaniam.cloud)
 
 <p align="center">
   <img src="assets/demo-ui.png" alt="Scrapes UI" width="720" />
 </p>
 
 <details>
-<summary>📱 Mobile view</summary>
+<summary>Mobile view</summary>
 <p align="center">
   <img src="assets/demo-ui-mobile.png" alt="Scrapes Mobile UI" width="320" />
 </p>
@@ -73,9 +77,9 @@ URL  →  Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download &
 
 ---
 
-## 🏗️ How It Works
+## How It Works
 
-Scrapes separates **annotation** (the expensive, creative AI step) from **rendering** (the mechanical compositing step). This is the key architectural decision:
+Scrapes separates **annotation** (the expensive, creative AI step) from **rendering** (the mechanical compositing step):
 
 ```
 ┌──────────┐     ┌────────────────┐     ┌──────────────────┐     ┌────────────────┐
@@ -84,46 +88,47 @@ Scrapes separates **annotation** (the expensive, creative AI step) from **render
 └──────────┘     └────────────────┘     └──────────────────┘     └────────────────┘
                         │                        │                        │
                         ▼                        ▼                        ▼
-                 ScreenshotOne            Structured JSON           Browserless
-                 (capture page)           annotation plan          (HTML → PNG)
+                    Urlbox                 Structured JSON           Browserless
+                (retina capture +         annotation plan          (HTML → PNG)
+                 markdown extract)
 ```
 
-**The 4-type slide system:**
+**The 3-type slide system (always exactly 5 slides):**
 
-| Slide Type | Purpose | Example |
-|-----------|---------|---------|
-| **Opener** | Pure text title card — sets context | "How Stripe's Pricing Page Converts" |
-| **Scene** | Screenshot crop + annotations — the workhorse | Highlighted CTA with arrow pointing to social proof |
-| **Insight** | Text-only takeaway slide (optional) | "3 things this landing page gets right" |
-| **Closer** | Contextual ending — adapts to content type | "Try it → stripe.com" or "TL;DR: 3 key steps" |
+| Slide | Type | Purpose |
+|-------|------|---------|
+| 1 | **Opener** | Title + badge + 3 bullet takeaways. Sets context AND delivers key insights in one card |
+| 2–4 | **Scene** | Screenshot crop + annotations (highlights, arrows, callouts). The workhorse slides |
+| 5 | **Closer** | Contextual ending — "Try it" for tools, step recap for tutorials, TL;DR for articles |
 
-Claude returns all annotations in **percentage-based coordinates**, so the same plan scales naturally to 4:5, 9:16, 2:3 — or any future ratio — without re-running the AI.
+Claude returns all annotations in **percentage-based coordinates**, so the same plan scales naturally to 3:4, 4:5, 9:16 — or any future ratio — without re-running the AI.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Technology | Role | Why This |
 |-----------|------|----------|
-| **Node.js + Express** | Server & API proxy | Minimal, fast, handles the single `/api/annotate` endpoint cleanly |
-| **Claude Sonnet** | Vision analysis + annotation planning | Best-in-class vision understanding — sees UI elements, not just pixels |
-| **ScreenshotOne** | Page capture | HMAC-signed requests, ad/cookie blocking, full-page capture up to 5000px |
+| **Node.js + Express** | Server & API proxy | Minimal, fast, handles the single `/api/annotate` endpoint |
+| **Claude Sonnet 4.6** | Vision analysis + annotation planning | Best-in-class vision understanding — sees UI elements, not just pixels |
+| **Urlbox** | Page capture | HMAC-signed render links, retina 2x DPI, ad/cookie blocking, markdown extraction |
+| **sharp** | Image processing | Downscales retina screenshots for Claude's limits, compresses uploads |
 | **Browserless** | HTML → PNG rendering | Self-hosted headless Chrome — renders SVG overlays onto screenshots at exact pixel dimensions |
-| **n8n** | Workflow orchestration | Visual pipeline that connects screenshot → analysis → rendering in 9 nodes |
+| **n8n** | Workflow orchestration | Visual pipeline that connects screenshot → analysis → rendering |
 | **Coolify** | Deployment platform | One-click Docker deploys on Hostinger VPS — the entire stack self-hosted |
 
-**Total dependencies:** 2 (`express` + `@anthropic-ai/sdk`). That's it.
+**Dependencies:** `express`, `@anthropic-ai/sdk`, `sharp`
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
 - Running [n8n](https://n8n.io) instance with the Scrapes render workflow
 - [Browserless](https://browserless.io) instance (self-hosted or cloud)
-- [ScreenshotOne](https://screenshotone.com) API credentials
+- [Urlbox](https://urlbox.com) API credentials
 - [Anthropic](https://anthropic.com) API key
 
 ### Local Setup
@@ -133,13 +138,13 @@ Claude returns all annotations in **percentage-based coordinates**, so the same 
 git clone https://github.com/txmyer-dev/scrapes.git
 cd scrapes
 
-# Install (just 2 dependencies)
+# Install
 npm install
 
 # Configure
 export ANTHROPIC_API_KEY=sk-ant-...
-export SSO_ACCESS_KEY=your-screenshotone-access-key
-export SSO_SECRET_KEY=your-screenshotone-secret-key
+export URLBOX_API_KEY=your-urlbox-api-key
+export URLBOX_SECRET_KEY=your-urlbox-secret-key
 export N8N_RENDER_WEBHOOK=https://your-n8n/webhook/scrapes-render
 
 # Run
@@ -154,43 +159,31 @@ App runs on `http://localhost:3100`
 docker build -t scrapes .
 docker run -p 3100:3100 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
-  -e SSO_ACCESS_KEY=... \
-  -e SSO_SECRET_KEY=... \
+  -e URLBOX_API_KEY=... \
+  -e URLBOX_SECRET_KEY=... \
   -e N8N_RENDER_WEBHOOK=https://your-n8n/webhook/scrapes-render \
   scrapes
 ```
 
 ---
 
-## 🔮 Future Improvements
-
-- **Horizontal formats** — YouTube thumbnails (16:9), Twitter/X cards, LinkedIn banners
-- **Carousel editing** — Drag to reorder slides, edit callout text before downloading
-- **Batch URLs** — Drop 10 URLs, get 10 carousels
-- **Template system** — Save and reuse annotation styles across URLs
-- **Auto-posting** — Direct publish to Instagram, TikTok, Pinterest via their APIs
-- **Video output** — Animate the carousel as a short-form video with slide transitions
-- **Chrome extension** — Right-click any page → "Generate carousel with Scrapes"
-
----
-
-## 📐 Architecture Details
+## Architecture
 
 ```
 scrapes/
-├── server.js           # Express server, Claude Vision integration, HTML template builders
+├── server.js           # Express server, Claude Vision, HTML template builders, image compression
 ├── public/
-│   └── index.html      # Single-page frontend (vanilla HTML/CSS/JS)
+│   └── index.html      # Single-page frontend (Tailwind + Material Design 3 glassmorphism UI)
 ├── Dockerfile          # Alpine Node 22 container
 ├── docker-compose.yaml # Full stack compose
 └── deploy.sh           # Deployment script
 ```
 
-**Cost per generation:** ~$0.03 (one Claude Sonnet vision call) + negligible compute for rendering. Generating 5 platform formats from one URL costs the same as generating 1.
+**Cost per generation:** ~$0.03 (one Claude Sonnet vision call) + negligible compute for rendering. Generating 3 formats from one URL costs the same as generating 1.
 
 ---
 
-## 📜 License
+## License
 
 MIT
 
