@@ -163,7 +163,9 @@ RULES:
 - NEVER produce "insight" type slides — fold all insights into the opener bullets
 
 CRITICAL SCENE RULES — ANNOTATION QUALITY:
-- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. NEVER more than 20%. Tight crops = readable content.
+- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. ABSOLUTELY NEVER more than 20%. If you exceed 20%, the slide will have dead space and look broken.
+- NEVER crop into empty/blank/white areas of the page. Every pixel of the crop should contain visible content. If the page is short, use smaller crops focused on dense content areas rather than stretching to cover empty space.
+- The rendered slide should be FILLED with content edge to edge. No large blank areas. If a section has padding or whitespace below it, end the crop BEFORE the whitespace.
 - Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full page.
 - 2-4 annotations per scene slide. Fewer, precise annotations beat many scattered ones.
 
