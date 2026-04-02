@@ -61,7 +61,7 @@ URL  →  Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download &
 🔗 **Try it live:** [scrapes.felaniam.cloud](https://scrapes.felaniam.cloud)
 
 <p align="center">
-  <img src="assets/demo-ui.png" alt="Scrapes UI" width="2560" />
+  <img src="assets/demo-ui.png" alt="Scrapes UI" width="1280" />
 </p>
 
 <details>
