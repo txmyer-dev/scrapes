@@ -253,14 +253,11 @@
     .prompt-row textarea::placeholder { color: rgba(203, 195, 217, 0.35); }
 
     /* Logo row */
-    .logo-row {
+    .reset-row {
       margin-top: 0.75rem;
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      justify-content: space-between;
     }
-    .logo-right { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
     .reset-btn {
       background: none;
       border: 1px solid rgba(73, 68, 86, 0.4);
@@ -280,26 +277,6 @@
       color: #ffb4ab;
       background: rgba(255, 180, 171, 0.08);
     }
-    .logo-upload-btn {
-      background: linear-gradient(135deg, #5d21df 0%, #00e3fd 100%);
-      border: none;
-      border-radius: 12px;
-      padding: 0.5rem 1rem;
-      color: white;
-      font-size: 0.8rem;
-      font-weight: 600;
-      font-family: 'Space Grotesk', sans-serif;
-      cursor: pointer;
-      transition: all 0.3s;
-      white-space: nowrap;
-    }
-    .logo-upload-btn:hover { box-shadow: 0 0 20px rgba(0, 227, 253, 0.3); }
-    .logo-preview { display: none; align-items: center; gap: 0.5rem; }
-    .logo-preview.visible { display: flex; }
-    .logo-preview img { height: 60px; max-width: 160px; object-fit: contain; border-radius: 8px; }
-    .logo-preview .logo-name { font-size: 0.75rem; color: #948da2; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .logo-remove { background: none; border: none; color: #ffb4ab; font-size: 0.9rem; cursor: pointer; padding: 0 0.25rem; line-height: 1; }
-    .logo-remove:hover { opacity: 0.7; }
 
     /* Status spinner */
     .status { margin-top: 1rem; display: none; align-items: center; gap: 0.75rem; color: #cbc3d9; font-size: 0.9rem; }
@@ -586,17 +563,8 @@
           </div>
 
           <!-- Logo / Reset Row -->
-          <div class="logo-row">
+          <div class="reset-row">
             <button type="button" class="reset-btn" onclick="resetAll()" title="Reset">&#x21bb;</button>
-            <div class="logo-right">
-              <input type="file" id="logo-file" accept="image/*" hidden />
-              <div class="logo-preview" id="logo-preview">
-                <img id="logo-preview-img" alt="Logo" />
-                <span class="logo-name" id="logo-name"></span>
-                <button type="button" class="logo-remove" onclick="removeLogo()">&times;</button>
-              </div>
-              <button type="button" class="logo-upload-btn" onclick="document.getElementById('logo-file').click()">Upload Logo</button>
-            </div>
           </div>
 
           <!-- Status -->
@@ -734,7 +702,6 @@
     var costBadge = document.getElementById('cost-badge');
 
     var generatedImages = [];
-    var logoBase64 = '';
     var sourceImageBase64 = '';
     var inputMode = 'url';
 
@@ -792,30 +759,6 @@
       document.getElementById('image-upload-preview').classList.remove('visible');
     }
 
-    // Logo upload handling
-    document.getElementById('logo-file').addEventListener('change', function(e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      if (file.size > 2 * 1024 * 1024) {
-        errorEl.textContent = 'Logo must be under 2MB.';
-        errorEl.classList.add('visible');
-        return;
-      }
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        logoBase64 = ev.target.result;
-        document.getElementById('logo-preview-img').src = logoBase64;
-        document.getElementById('logo-name').textContent = file.name;
-        document.getElementById('logo-preview').classList.add('visible');
-      };
-      reader.readAsDataURL(file);
-    });
-
-    function removeLogo() {
-      logoBase64 = '';
-      document.getElementById('logo-file').value = '';
-      document.getElementById('logo-preview').classList.remove('visible');
-    }
 
     var statusMessages = [
       'Capturing full-page screenshot...',
@@ -912,7 +855,7 @@
 
     // Fire a single format request and return its result
     async function generateOneFormat(p, url, sourceImage, userPrompt) {
-      var payload = { formats: [p.ratio], prompt: userPrompt, logo: logoBase64 || undefined };
+      var payload = { formats: [p.ratio], prompt: userPrompt };
       if (inputMode === 'url') {
         payload.url = url;
       } else {
@@ -1163,7 +1106,6 @@
     function resetAll() {
       urlInput.value = '';
       promptInput.value = '';
-      removeLogo();
       removeSourceImage();
       generatedImages = [];
       slideData = [];
