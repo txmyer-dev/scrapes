@@ -1002,37 +1002,43 @@
       resultsInfo.textContent = label;
       costBadge.textContent = '~$' + (0.03 * selected.length).toFixed(2) + ' est.';
 
-      // Create a section per format with placeholder cards
+      // Create a section per format with horizontal carousel
       var formatSections = {};
       selected.forEach(function(p) {
         var section = document.createElement('div');
         section.id = 'format-section-' + p.id;
         section.style.cssText = 'margin-bottom:2rem;';
 
+        // Format header
         var header = document.createElement('div');
-        header.style.cssText = 'display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;';
+        header.style.cssText = 'display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;padding:0 0.25rem;';
         var dot = document.createElement('div');
         dot.id = 'format-dot-' + p.id;
-        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(205,189,255,0.4);animation:spin 1.5s linear infinite;';
+        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(205,189,255,0.4);animation:spin 1.5s linear infinite;flex-shrink:0;';
         var title = document.createElement('span');
-        title.style.cssText = 'font-family:Space Grotesk,sans-serif;font-weight:600;font-size:0.9rem;color:#cbc3d9;';
-        title.textContent = p.name + ' (' + p.w + '\u00D7' + p.h + ')';
+        title.style.cssText = 'font-family:Space Grotesk,sans-serif;font-weight:700;font-size:1.1rem;color:#e4e1ee;';
+        title.textContent = p.name;
+        var dims = document.createElement('span');
+        dims.style.cssText = 'font-size:0.75rem;color:#948da2;';
+        dims.textContent = p.w + '\u00D7' + p.h;
         var statusSpan = document.createElement('span');
         statusSpan.id = 'format-status-' + p.id;
         statusSpan.style.cssText = 'font-size:0.75rem;color:#948da2;margin-left:auto;';
         statusSpan.textContent = 'generating...';
         header.appendChild(dot);
         header.appendChild(title);
+        header.appendChild(dims);
         header.appendChild(statusSpan);
         section.appendChild(header);
 
-        var grid = document.createElement('div');
-        grid.className = 'image-grid';
-        grid.id = 'format-grid-' + p.id;
-        section.appendChild(grid);
+        // Horizontal scroll carousel
+        var carousel = document.createElement('div');
+        carousel.id = 'format-carousel-' + p.id;
+        carousel.style.cssText = 'display:flex;gap:0.75rem;overflow-x:auto;padding:0.25rem 0 1rem 0;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(205,189,255,0.3) transparent;';
+        section.appendChild(carousel);
 
         imageGrid.appendChild(section);
-        formatSections[p.id] = { section: section, grid: grid };
+        formatSections[p.id] = { section: section, carousel: carousel };
       });
 
       // Fire all format requests in parallel
@@ -1045,7 +1051,13 @@
           if (dot) dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#bdf4ff;box-shadow:0 0 8px rgba(0,227,253,0.8);';
           if (statusSpan) statusSpan.textContent = data.slides.length + ' slides';
 
-          var grid = formatSections[p.id].grid;
+          var carousel = formatSections[p.id].carousel;
+          var totalSlides = data.slides.length;
+          // Calculate card height based on ratio for consistent sizing
+          var ratioParts = p.ratio.split(':').map(Number);
+          var cardWidth = 220;
+          var cardHeight = Math.round(cardWidth * (ratioParts[1] / ratioParts[0]));
+
           data.slides.forEach(function(slide) {
             var img = slide.images[p.ratio];
             if (img) {
@@ -1058,41 +1070,48 @@
                 image: img
               });
 
-              var card = buildCardElement(p, 'loaded');
-              card.id = 'card-' + p.id + '-s' + slide.slideNumber;
-              grid.appendChild(card);
+              // Slim carousel card
+              var card = document.createElement('div');
+              card.style.cssText = 'flex-shrink:0;width:' + cardWidth + 'px;scroll-snap-align:start;border-radius:12px;overflow:hidden;border:1px solid rgba(73,68,86,0.3);background:rgba(52,52,62,0.4);cursor:pointer;position:relative;transition:border-color 0.2s;';
+              card.addEventListener('mouseenter', function() { card.style.borderColor = 'rgba(205,189,255,0.4)'; });
+              card.addEventListener('mouseleave', function() { card.style.borderColor = 'rgba(73,68,86,0.3)'; });
 
-              // Set image
-              var body = card.querySelector('.card-body');
-              body.textContent = '';
               var imgEl = document.createElement('img');
               imgEl.src = img;
               imgEl.alt = p.name + ' slide ' + slide.slideNumber;
-              (function(imgData, platformId, slideNum) {
+              imgEl.style.cssText = 'width:100%;height:' + cardHeight + 'px;object-fit:cover;display:block;';
+
+              // Slide number badge
+              var badge = document.createElement('div');
+              badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(13,13,22,0.7);backdrop-filter:blur(4px);color:#e4e1ee;font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:6px;font-family:Space Grotesk,sans-serif;';
+              badge.textContent = slide.slideNumber + '/' + totalSlides;
+
+              // Download button overlay
+              var dlBtn = document.createElement('button');
+              dlBtn.style.cssText = 'position:absolute;top:8px;right:8px;background:rgba(13,13,22,0.7);backdrop-filter:blur(4px);border:none;color:#cdbdff;font-size:0.65rem;font-weight:600;padding:3px 8px;border-radius:6px;cursor:pointer;opacity:0;transition:opacity 0.2s;font-family:Space Grotesk,sans-serif;';
+              dlBtn.textContent = '\u2913';
+              card.addEventListener('mouseenter', function() { dlBtn.style.opacity = '1'; });
+              card.addEventListener('mouseleave', function() { dlBtn.style.opacity = '0'; });
+
+              (function(imgData, platformId, slideNum, ratio) {
                 imgEl.addEventListener('click', function() {
-                  var lbIdx = generatedImages.findIndex(function(gi) { return gi.slideNumber === slideNum && gi.ratio === p.ratio; });
+                  var lbIdx = generatedImages.findIndex(function(gi) { return gi.slideNumber === slideNum && gi.ratio === ratio; });
                   if (lbIdx !== -1) { updateLightbox(lbIdx); lightbox.classList.add('visible'); document.body.style.overflow = 'hidden'; }
                 });
-                var dlBtn = card.querySelector('.card-download');
-                if (dlBtn) {
-                  dlBtn.style.display = '';
-                  dlBtn.onclick = function() {
-                    var a = document.createElement('a');
-                    a.href = imgData;
-                    var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
-                    a.download = 'scrapes_' + domain + '_slide' + slideNum + '_' + platformId + '.png';
-                    a.click();
-                  };
-                }
-              })(img, p.id, slide.slideNumber);
+                dlBtn.addEventListener('click', function(e) {
+                  e.stopPropagation();
+                  var a = document.createElement('a');
+                  a.href = imgData;
+                  var domain = urlInput.value.replace(/https?:\/\//, '').replace(/[/\\?#]/g, '_').slice(0, 30);
+                  a.download = 'scrapes_' + domain + '_slide' + slideNum + '_' + platformId + '.png';
+                  a.click();
+                });
+              })(img, p.id, slide.slideNumber, p.ratio);
 
-              body.appendChild(imgEl);
-
-              // Slide label
-              var slideLabel = document.createElement('div');
-              slideLabel.style.cssText = 'padding:0.4rem 0.8rem;font-size:0.75rem;color:#948da2;border-top:1px solid rgba(73,68,86,0.3);';
-              slideLabel.textContent = 'Slide ' + slide.slideNumber + ': ' + (slide.title || slide.type);
-              card.appendChild(slideLabel);
+              card.appendChild(imgEl);
+              card.appendChild(badge);
+              card.appendChild(dlBtn);
+              carousel.appendChild(card);
             }
           });
 
@@ -1107,12 +1126,11 @@
           if (dot) dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#ffb4ab;box-shadow:0 0 8px rgba(255,180,171,0.6);';
           if (statusSpan) { statusSpan.textContent = 'failed'; statusSpan.style.color = '#ffb4ab'; }
 
-          var grid = formatSections[p.id].grid;
+          var carousel = formatSections[p.id].carousel;
           var errDiv = document.createElement('div');
-          errDiv.className = 'card-error';
-          errDiv.style.cssText = 'padding:1.5rem;color:#ffb4ab;font-size:0.85rem;text-align:center;';
+          errDiv.style.cssText = 'padding:1.5rem;color:#ffb4ab;font-size:0.85rem;text-align:center;width:100%;';
           errDiv.textContent = err.message;
-          grid.appendChild(errDiv);
+          carousel.appendChild(errDiv);
 
           completedCount++;
         });
