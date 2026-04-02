@@ -397,15 +397,15 @@ app.post('/api/annotate', async (req, res) => {
     }
 
     // Step 4: Send to n8n for rendering (scene slides use crop+annotate, pure slides use provided HTML)
-    // Downscale retina image to 1080px wide for n8n — it only needs output-res for cropping
+    // Downscale retina image for n8n payload — keep proportions, use high quality
     let renderImage = base64Image;
     if (!image) {
       const renderBuf = Buffer.from(base64Image, 'base64');
       const renderMeta = await sharp(renderBuf).metadata();
-      if (renderMeta.width > 1080) {
-        const scaled = await sharp(renderBuf).resize(1080).jpeg({ quality: 85 }).toBuffer();
+      if (renderMeta.width > 1280) {
+        const scaled = await sharp(renderBuf).resize(1280).png().toBuffer();
         renderImage = scaled.toString('base64');
-        console.log(`  Render image: ${renderMeta.width}x${renderMeta.height} → 1080px wide (${(scaled.length/1024/1024).toFixed(1)}MB)`);
+        console.log(`  Render image: ${renderMeta.width}x${renderMeta.height} → 1280px wide (${(scaled.length/1024/1024).toFixed(1)}MB)`);
       }
     }
     const renderPayload = {
