@@ -8,9 +8,9 @@ const app = express();
 const PORT = process.env.PORT || 3100;
 const N8N_RENDER_WEBHOOK = process.env.N8N_RENDER_WEBHOOK || 'https://n8n.felaniam.cloud/webhook/scrapes-render';
 
-// ScreenshotOne credentials
-const SSO_ACCESS = process.env.SSO_ACCESS_KEY;
-const SSO_SECRET = process.env.SSO_SECRET_KEY;
+// Urlbox credentials
+const URLBOX_KEY = process.env.URLBOX_API_KEY;
+const URLBOX_SECRET = process.env.URLBOX_SECRET_KEY;
 
 // Anthropic client
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -40,29 +40,59 @@ async function compressForClaude(base64Data, inputMimeType) {
   return { base64: resized.toString('base64'), mimeType: 'image/jpeg' };
 }
 
-// --- Screenshot ---
-async function takeScreenshot(targetUrl) {
-  const params = [
-    `access_key=${SSO_ACCESS}`,
-    `url=${encodeURIComponent(targetUrl)}`,
-    `full_page=true`,
-    `full_page_max_height=5000`,
-    `format=jpg`,
-    `image_quality=70`,
-    `viewport_width=1280`,
-    `viewport_height=800`,
-    `delay=3`,
-    `block_ads=true`,
-    `block_cookie_banners=true`,
-  ].join('&');
-  const signature = crypto.createHmac('sha256', SSO_SECRET).update(params).digest('hex');
-  const ssoUrl = `https://api.screenshotone.com/take?${params}&signature=${signature}`;
+// --- Screenshot via Urlbox render link ---
+function buildUrlboxUrl(targetUrl, format, width, height) {
+  const params = new URLSearchParams({
+    url: targetUrl,
+    width: String(width),
+    height: String(height),
+    full_page: 'true',
+    block_ads: 'true',
+    hide_cookie_banners: 'true',
+    retina: 'true',
+    format: format,
+    quality: '80',
+    delay: '3000',
+  });
+  const token = crypto.createHmac('sha256', URLBOX_SECRET).update(params.toString()).digest('hex');
+  return `https://api.urlbox.com/v1/${URLBOX_KEY}/${token}/${format}?${params.toString()}`;
+}
 
-  const resp = await fetch(ssoUrl);
-  if (!resp.ok) throw new Error('ScreenshotOne failed: ' + resp.status);
-  const buffer = Buffer.from(await resp.arrayBuffer());
-  if (buffer.length > 4800000) throw new Error('Screenshot too large (' + Math.round(buffer.length / 1024 / 1024) + 'MB). Try a shorter page.');
-  return buffer.toString('base64');
+async function takeScreenshot(targetUrl, formatList) {
+  // Use the tallest selected format as viewport — vertical capture for vertical social output
+  const ratios = (formatList || ['4:5']).map(r => {
+    const [w, h] = r.split(':').map(Number);
+    return { ratio: r, w: 1080, h: Math.round(1080 * (h / w)) };
+  });
+  const tallest = ratios.reduce((a, b) => a.h > b.h ? a : b);
+
+  // Capture screenshot (retina = 2x resolution for crisp output)
+  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', tallest.w, tallest.h);
+  console.log(`  Urlbox: ${tallest.w}x${tallest.h} viewport (retina 2x → ${tallest.w * 2}x${tallest.h * 2} output)`);
+
+  const imgResp = await fetch(imgUrl);
+  if (!imgResp.ok) {
+    const errText = await imgResp.text().catch(() => '');
+    throw new Error('Urlbox screenshot failed: ' + imgResp.status + ' ' + errText.substring(0, 200));
+  }
+  const buffer = Buffer.from(await imgResp.arrayBuffer());
+
+  // Also fetch markdown for Claude context
+  let markdown = '';
+  try {
+    const mdUrl = buildUrlboxUrl(targetUrl, 'md', 1280, 800);
+    const mdResp = await fetch(mdUrl);
+    if (mdResp.ok) {
+      markdown = await mdResp.text();
+      // Trim to first 4000 chars to stay within Claude's context budget
+      if (markdown.length > 4000) markdown = markdown.substring(0, 4000) + '\n...(truncated)';
+      console.log(`  Markdown extracted: ${markdown.length} chars`);
+    }
+  } catch (e) {
+    console.log('  Markdown extraction failed (non-fatal):', e.message);
+  }
+
+  return { base64: buffer.toString('base64'), markdown };
 }
 
 // --- Metadata ---
@@ -167,13 +197,17 @@ OTHER RULES:
 - Adapt the closer to the page type. Tools/products: "Try it" + URL. Tutorials: recap steps. Articles: TL;DR.
 - badge on opener: a short category label like "TOOL", "TUTORIAL", "BLOG", "DOCS", "PORTFOLIO" etc.`;
 
+  const markdownSection = metadata.markdown
+    ? `\nExtracted page content (markdown):\n${metadata.markdown}\n`
+    : '';
+
   const userText = `This is a full-page screenshot of ${metadata.url}.
 
 Page context:
 - Title: ${metadata.title}
 - Description: ${metadata.description}
 - Key sections: ${JSON.stringify(metadata.headings)}
-${userPrompt ? '\nUser instructions: ' + userPrompt : ''}
+${markdownSection}${userPrompt ? '\nUser instructions: ' + userPrompt : ''}
 
 Analyze this page and create the carousel slide plan using the 4-type system.`;
 
@@ -340,17 +374,31 @@ app.post('/api/annotate', async (req, res) => {
       metadata = { url: 'uploaded-image', title: 'Uploaded Image', description: '', headings: [] };
     } else {
       console.log('[1/3] Screenshot + metadata...');
-      const [screenshot, meta] = await Promise.all([
-        takeScreenshot(url),
+      const [screenshotResult, meta] = await Promise.all([
+        takeScreenshot(url, formatList),
         fetchMetadata(url),
       ]);
-      base64Image = screenshot;
-      metadata = { ...meta, url };
+      base64Image = screenshotResult.base64;
+      metadata = { ...meta, url, markdown: screenshotResult.markdown };
+      // Retina screenshots can exceed Claude's 8000px limit — downscale for analysis
+      const imgBuf = Buffer.from(base64Image, 'base64');
+      const sharpMeta = await sharp(imgBuf).metadata();
+      if (sharpMeta.width > 7999 || sharpMeta.height > 7999) {
+        console.log(`  Retina image ${sharpMeta.width}x${sharpMeta.height} exceeds 8000px, downscaling for Claude...`);
+        const scale = Math.min(7999 / sharpMeta.width, 7999 / sharpMeta.height);
+        const resized = await sharp(imgBuf)
+          .resize(Math.round(sharpMeta.width * scale), Math.round(sharpMeta.height * scale))
+          .jpeg({ quality: 75 })
+          .toBuffer();
+        claudeBase64 = resized.toString('base64');
+        claudeMimeType = 'image/jpeg';
+        console.log(`  Downscaled to ${Math.round(sharpMeta.width * scale)}x${Math.round(sharpMeta.height * scale)} (${(resized.length/1024/1024).toFixed(1)}MB)`);
+      }
     }
 
     // Step 2: Claude Vision analysis (4-type slide system)
     console.log('[2/3] Claude Vision analysis (4-type slides)...');
-    // Use compressed image for Claude (stays under 5MB), full-res for rendering
+    // Use downscaled/compressed image for Claude, full-res retina for n8n rendering
     const claudeImg = claudeBase64 || base64Image;
     const claudeMime = claudeMimeType || detectedMimeType || 'image/jpeg';
     const carousel = await analyzeWithClaude(claudeImg, metadata, prompt, claudeMime);
@@ -369,9 +417,20 @@ app.post('/api/annotate', async (req, res) => {
     }
 
     // Step 4: Send to n8n for rendering (scene slides use crop+annotate, pure slides use provided HTML)
+    // Downscale retina image to 1080px wide for n8n — it only needs output-res for cropping
+    let renderImage = base64Image;
+    if (!image) {
+      const renderBuf = Buffer.from(base64Image, 'base64');
+      const renderMeta = await sharp(renderBuf).metadata();
+      if (renderMeta.width > 1080) {
+        const scaled = await sharp(renderBuf).resize(1080).jpeg({ quality: 85 }).toBuffer();
+        renderImage = scaled.toString('base64');
+        console.log(`  Render image: ${renderMeta.width}x${renderMeta.height} → 1080px wide (${(scaled.length/1024/1024).toFixed(1)}MB)`);
+      }
+    }
     const renderPayload = {
       carousel,
-      base64Image,
+      base64Image: renderImage,
       mimeType: detectedMimeType || 'image/jpeg',
       formats: formatList,
       url: metadata.url,
