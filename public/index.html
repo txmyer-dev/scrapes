@@ -253,11 +253,6 @@
     .prompt-row textarea::placeholder { color: rgba(203, 195, 217, 0.35); }
 
     /* Logo row */
-    .reset-row {
-      margin-top: 0.75rem;
-      display: flex;
-      align-items: center;
-    }
     .reset-btn {
       background: none;
       border: 1px solid rgba(73, 68, 86, 0.4);
@@ -518,9 +513,12 @@
         <div class="absolute -inset-0.5 bg-gradient-to-r from-primary-container to-secondary-container rounded-[28px] blur opacity-15 group-hover:opacity-25 transition duration-500"></div>
         <div class="relative glass-panel border border-outline-variant/15 rounded-3xl p-8 shadow-2xl">
 
-          <div class="input-toggle" id="input-toggle">
-            <button class="active" onclick="setInputMode('url')">URL</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+            <div class="input-toggle" id="input-toggle" style="margin-bottom:0;">
+              <button class="active" onclick="setInputMode('url')">URL</button>
             <button onclick="setInputMode('image')">Upload Image</button>
+            </div>
+            <button type="button" class="reset-btn" onclick="resetAll()" title="Reset">&#x21bb;</button>
           </div>
 
           <!-- URL Input -->
@@ -563,9 +561,6 @@
           </div>
 
           <!-- Logo / Reset Row -->
-          <div class="reset-row">
-            <button type="button" class="reset-btn" onclick="resetAll()" title="Reset">&#x21bb;</button>
-          </div>
 
           <!-- Status -->
           <div class="status" id="status">
