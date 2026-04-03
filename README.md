@@ -65,7 +65,7 @@ URL  →  Retina Screenshot  →  AI Analysis  →  Annotated Carousel  →  Dow
 **Try it live:** [scrapes.felaniam.cloud](https://scrapes.felaniam.cloud)
 
 <p align="center">
-  <img src="assets/demo-ui.png" alt="Scrapes UI" width="720" />
+  <img src="assets/demo-ui.png" alt="Scrapes UI" width="1280" />
 </p>
 
 <details>
