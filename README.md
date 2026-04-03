@@ -167,6 +167,12 @@ docker run -p 3100:3100 \
 
 ---
 
+## Known Limitations
+
+- **Long pages may fail to render.** Full-page screenshots of content-heavy pages (long blog posts, documentation, etc.) can produce very large images (10MB+) that exceed the n8n webhook payload limit. Pages that are 1-3 screens tall (~0.4MB render image) work reliably. Pages beyond ~5,000px tall may time out or silently fail during the render step. For best results, use landing pages, product pages, and short-form content. A future update will add page-height capping or chunked rendering to handle long pages gracefully.
+
+---
+
 ## Architecture
 
 ```
