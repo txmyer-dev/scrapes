@@ -41,12 +41,11 @@ async function compressForClaude(base64Data, inputMimeType) {
 }
 
 // --- Screenshot via Urlbox render link ---
-function buildUrlboxUrl(targetUrl, format, width, height) {
+function buildUrlboxUrl(targetUrl, format, width, height, { fullPage = false } = {}) {
   const params = new URLSearchParams({
     url: targetUrl,
     width: String(width),
     height: String(height),
-    full_page: 'true',
     block_ads: 'true',
     hide_cookie_banners: 'true',
     retina: 'true',
@@ -54,21 +53,19 @@ function buildUrlboxUrl(targetUrl, format, width, height) {
     quality: '80',
     delay: '3000',
   });
+  if (fullPage) params.set('full_page', 'true');
   const token = crypto.createHmac('sha256', URLBOX_SECRET).update(params.toString()).digest('hex');
   return `https://api.urlbox.com/v1/${URLBOX_KEY}/${token}/${format}?${params.toString()}`;
 }
 
 async function takeScreenshot(targetUrl, formatList) {
-  // Use the tallest selected format as viewport — vertical capture for vertical social output
-  const ratios = (formatList || ['4:5']).map(r => {
-    const [w, h] = r.split(':').map(Number);
-    return { ratio: r, w: 1080, h: Math.round(1080 * (h / w)) };
-  });
-  const tallest = ratios.reduce((a, b) => a.h > b.h ? a : b);
+  // Fixed viewport capture — no full-page scroll. Captures above-the-fold only.
+  // 1080x1350 = 4:5 ratio, the most common social format. Retina 2x → 2160x2700 output.
+  const VW = 1080;
+  const VH = 1350;
 
-  // Capture screenshot (retina = 2x resolution for crisp output)
-  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', tallest.w, tallest.h);
-  console.log(`  Urlbox: ${tallest.w}x${tallest.h} viewport (retina 2x → ${tallest.w * 2}x${tallest.h * 2} output)`);
+  const imgUrl = buildUrlboxUrl(targetUrl, 'jpg', VW, VH);
+  console.log(`  Urlbox: ${VW}x${VH} viewport (retina 2x → ${VW * 2}x${VH * 2} output)`);
 
   const imgResp = await fetch(imgUrl);
   if (!imgResp.ok) {
@@ -80,7 +77,7 @@ async function takeScreenshot(targetUrl, formatList) {
   // Also fetch markdown for Claude context
   let markdown = '';
   try {
-    const mdUrl = buildUrlboxUrl(targetUrl, 'md', 1280, 800);
+    const mdUrl = buildUrlboxUrl(targetUrl, 'md', 1280, 800, { fullPage: true });
     const mdResp = await fetch(mdUrl);
     if (mdResp.ok) {
       markdown = await mdResp.text();
@@ -163,10 +160,10 @@ RULES:
 - NEVER produce "insight" type slides — fold all insights into the opener bullets
 
 CRITICAL SCENE RULES — ANNOTATION QUALITY:
-- cropRegion: y_start/y_end are percentages (0-100) of full page height. Each crop MUST span 8-18% of the page height. ABSOLUTELY NEVER more than 20%. If you exceed 20%, the slide will have dead space and look broken.
-- NEVER crop into empty/blank/white areas of the page. Every pixel of the crop should contain visible content. If the page is short, use smaller crops focused on dense content areas rather than stretching to cover empty space.
-- The rendered slide should be FILLED with content edge to edge. No large blank areas. If a section has padding or whitespace below it, end the crop BEFORE the whitespace.
-- Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full page.
+- The screenshot is a FIXED VIEWPORT capture (above-the-fold only, 1080x1350 at 1x). It is NOT a full-page scroll. You are looking at exactly what a visitor sees on first load.
+- cropRegion: y_start/y_end are percentages (0-100) of this fixed viewport. With 3 scene slides, divide the viewport into 3 non-overlapping vertical bands (roughly 0-33, 33-66, 66-100). Adjust boundaries to align with natural content breaks.
+- Each crop should span 25-40% of the viewport height. The viewport is dense — use generous crops.
+- Annotation coordinates: percentages (0-100) RELATIVE TO THE CROP REGION, not the full viewport.
 - 2-4 annotations per scene slide. Fewer, precise annotations beat many scattered ones.
 
 ANNOTATION PLACEMENT (CRITICAL — READ CAREFULLY):
@@ -362,20 +359,7 @@ app.post('/api/annotate', async (req, res) => {
       ]);
       base64Image = screenshotResult.base64;
       metadata = { ...meta, url, markdown: screenshotResult.markdown };
-      // Retina screenshots can exceed Claude's 8000px limit — downscale for analysis
-      const imgBuf = Buffer.from(base64Image, 'base64');
-      const sharpMeta = await sharp(imgBuf).metadata();
-      if (sharpMeta.width > 7999 || sharpMeta.height > 7999) {
-        console.log(`  Retina image ${sharpMeta.width}x${sharpMeta.height} exceeds 8000px, downscaling for Claude...`);
-        const scale = Math.min(7999 / sharpMeta.width, 7999 / sharpMeta.height);
-        const resized = await sharp(imgBuf)
-          .resize(Math.round(sharpMeta.width * scale), Math.round(sharpMeta.height * scale))
-          .jpeg({ quality: 75 })
-          .toBuffer();
-        claudeBase64 = resized.toString('base64');
-        claudeMimeType = 'image/jpeg';
-        console.log(`  Downscaled to ${Math.round(sharpMeta.width * scale)}x${Math.round(sharpMeta.height * scale)} (${(resized.length/1024/1024).toFixed(1)}MB)`);
-      }
+      // Fixed viewport (1080x1350) at retina 2x = 2160x2700 — always under Claude's 8000px limit
     }
 
     // Step 2: Claude Vision analysis (4-type slide system)

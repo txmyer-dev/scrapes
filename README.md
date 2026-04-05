@@ -29,7 +29,7 @@ Every day, creators, educators, and marketers see web content they want to share
 No templates. No drag-and-drop. No design decisions. Claude Vision *sees* the page, *understands* what matters, and *builds* the carousel for you.
 
 ```
-URL  →  Retina Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download & Post
+URL  →  Viewport Screenshot  →  AI Analysis  →  Annotated Carousel  →  Download & Post
 ```
 
 ---
@@ -40,12 +40,12 @@ URL  →  Retina Screenshot  →  AI Analysis  →  Annotated Carousel  →  Dow
 - **Opener with Bullets** — Title card combines headline + 3 key takeaways, replacing the old separate insight slide
 - **3 Vertical Formats** — Portrait (3:4), Social (4:5), Story (9:16) — pick one or all
 - **One-Pass Intelligence** — Claude Vision analyzes once, renders to any ratio. 1 format or 3 = same ~$0.03 API cost
-- **Retina Screenshots** — Urlbox captures at 2x DPI for crisp, high-resolution output
-- **Tight Crop Regions** — Scene slides fill edge-to-edge with content, no dead space
+- **Fixed Viewport Capture** — Urlbox captures above-the-fold at 1080x1350 (retina 2x) for a bounded, predictable canvas
+- **Tight Crop Regions** — Scene slides divide the viewport into 3 dense, content-filled bands
 - **Parallel Format Rendering** — Each format renders independently with its own viewport-matched screenshot
 - **User-Guided Focus** — Tell it what to highlight: *"Focus on the pricing table"* or *"Annotate the signup flow"*
 - **Auto Color Extraction** — Pulls the page's brand palette for cohesive, on-brand annotations
-- **Smart Image Compression** — Retina images auto-downscale for Claude's 5MB/8000px limits, full-res preserved for rendering
+- **Smart Image Compression** — Images auto-compress for Claude's 5MB limit when needed, full-res preserved for rendering
 - **Image Upload Support** — Don't have a URL? Drop in a screenshot directly
 - **Batch Download** — One click to grab every generated image
 - **Glassmorphism UI** — Dark, minimal interface with frosted glass effects and Material Design 3 color system
@@ -89,8 +89,8 @@ Scrapes separates **annotation** (the expensive, creative AI step) from **render
                         │                        │                        │
                         ▼                        ▼                        ▼
                     Urlbox                 Structured JSON           Browserless
-                (retina capture +         annotation plan          (HTML → PNG)
-                 markdown extract)
+              (viewport capture +         annotation plan          (HTML → PNG)
+               markdown extract)
 ```
 
 **The 3-type slide system (always exactly 5 slides):**
@@ -101,7 +101,7 @@ Scrapes separates **annotation** (the expensive, creative AI step) from **render
 | 2–4 | **Scene** | Screenshot crop + annotations (highlights, arrows, callouts). The workhorse slides |
 | 5 | **Closer** | Contextual ending — "Try it" for tools, step recap for tutorials, TL;DR for articles |
 
-Claude returns all annotations in **percentage-based coordinates**, so the same plan scales naturally to 3:4, 4:5, 9:16 — or any future ratio — without re-running the AI.
+Claude analyzes a fixed 1080x1350 viewport (above-the-fold) and returns all annotations in **percentage-based coordinates**, so the same plan scales naturally to 3:4, 4:5, 9:16 — or any future ratio — without re-running the AI. The bounded canvas makes coordinate placement deterministic.
 
 ---
 
@@ -111,7 +111,7 @@ Claude returns all annotations in **percentage-based coordinates**, so the same 
 |-----------|------|----------|
 | **Node.js + Express** | Server & API proxy | Minimal, fast, handles the single `/api/annotate` endpoint |
 | **Claude Sonnet 4.6** | Vision analysis + annotation planning | Best-in-class vision understanding — sees UI elements, not just pixels |
-| **Urlbox** | Page capture | HMAC-signed render links, retina 2x DPI, ad/cookie blocking, markdown extraction |
+| **Urlbox** | Page capture | HMAC-signed render links, fixed 1080x1350 viewport at retina 2x, ad/cookie blocking, markdown extraction |
 | **sharp** | Image processing | Downscales retina screenshots for Claude's limits, compresses uploads |
 | **Browserless** | HTML → PNG rendering | Self-hosted headless Chrome — renders SVG overlays onto screenshots at exact pixel dimensions |
 | **n8n** | Workflow orchestration | Visual pipeline that connects screenshot → analysis → rendering |
